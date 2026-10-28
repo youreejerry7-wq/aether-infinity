@@ -1,0 +1,93 @@
+[
+  {
+    "time": "2026-10-28T05:43:39.129205+00:00",
+    "status": "completed",
+    "z_threshold": 3.29,
+    "experiments": [
+      {
+        "name": "Fair coin frequency",
+        "category": "known_baseline",
+        "observed": 0.50098,
+        "expected": 0.5,
+        "z_score": 0.62,
+        "trials": 100000,
+        "z_threshold": 3.29,
+        "flag": false,
+        "description": "Bernoulli trial with expected probability p=0.5"
+      },
+      {
+        "name": "Uniform threshold frequency",
+        "category": "known_baseline",
+        "observed": 0.24992,
+        "expected": 0.25,
+        "z_score": -0.058,
+        "trials": 100000,
+        "z_threshold": 3.29,
+        "flag": false,
+        "description": "Bernoulli trial with expected probability p=0.25"
+      },
+      {
+        "name": "Monte Carlo pi estimation",
+        "category": "known_baseline",
+        "observed": 3.1542,
+        "expected": 3.141593,
+        "z_score": 2.428,
+        "trials": 100000,
+        "z_threshold": 3.29,
+        "flag": false,
+        "description": "Monte Carlo unit-square quarter-circle Pi estimation"
+      },
+      {
+        "name": "Rare-event frequency",
+        "category": "known_baseline",
+        "observed": 0.01993,
+        "expected": 0.02,
+        "z_score": -0.224,
+        "trials": 200000,
+        "z_threshold": 3.29,
+        "flag": false,
+        "description": "Bernoulli trial with expected probability p=0.02"
+      }
+    ],
+    "errors": [],
+    "interpretation": "Flags (|z| > 3.29, two-tailed p < 0.001) indicate statistical fluctuations from known mathematical baselines, not scientific discoveries. Independent replication required."
+  },
+  {
+    "time": "2026-10-28T05:41:26.010911+00:00",
+    "experiments": [
+      {
+        "name": "Fair coin frequency",
+        "observed": 0.49677,
+        "expected": 0.5,
+        "z_score": -2.043,
+        "trials": 100000,
+        "flag": false
+      },
+      {
+        "name": "Uniform threshold frequency",
+        "observed": 0.25091,
+        "expected": 0.25,
+        "z_score": 0.665,
+        "trials": 100000,
+        "flag": false
+      },
+      {
+        "name": "Monte Carlo pi estimation",
+        "observed": 3.13804,
+        "expected": 3.141593,
+        "z_score": -0.684,
+        "trials": 100000,
+        "flag": false
+      },
+      {
+        "name": "Rare-event frequency",
+        "observed": 0.019785,
+        "expected": 0.02,
+        "z_score": -0.687,
+        "trials": 200000,
+        "flag": false
+      }
+    ],
+    "interpretation": "Flags indicate deviations worth replication, not discoveries. Multiple-testing corrections and independent validation are required."
+  }
+]

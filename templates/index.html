@@ -1,1 +1,246 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AETHER ∞ — Research Laboratory</title><style>body{background:#0a101d;color:#edf3ff;font:16px system-ui;margin:0;padding:36px 20px}main{max-width:920px;margin:auto}h1{font-size:clamp(36px,7vw,64px);margin-bottom:4px}p{color:#aebcd1}button{background:#8ee0d0;color:#06131a;border:0;border-radius:10px;padding:15px 22px;font-weight:700;cursor:pointer}.panel{background:#151f32;border:1px solid #34445c;border-radius:16px;padding:22px;margin-top:24px}table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;border-bottom:1px solid #34445c;padding:12px 5px}small{color:#9fb0c6}</style><main><h1>AETHER ∞</h1><p>Experimental research laboratory · Transparent simulations · Recorded results</p><div class="panel"><h2>Monte Carlo laboratory</h2><p>Run 20,000 random samples to estimate π. This is a validation experiment, not a novel scientific discovery.</p><button id="run">Run experiment</button><p id="message" role="status">Ready.</p></div><div class="panel"><h2>Experiment archive</h2><div style="overflow-x:auto"><table><thead><tr><th>UTC date</th><th>Trials</th><th>Estimate</th><th>Absolute error</th></tr></thead><tbody id="results"></tbody></table></div><small>Demo storage is ephemeral unless a persistent database is configured. Automated background research is not yet enabled.</small></div><div class="panel"><h2>Autonomous research cycles</h2><p>Scheduled hourly through GitHub Actions. Results are independently generated and saved to GitHub, even when this free web service sleeps. GitHub may delay or skip scheduled runs.</p><p id="auto-status" role="status">Checking scheduled research archive…</p><div id="auto-results"></div><small>Statistical flags are not discoveries. Each test uses a known mathematical baseline and needs replication.</small></div><script>async function loadAuto(){try{const r=await fetch('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw Error('No completed scheduled cycles yet');const data=await r.json();const latest=data[0];document.getElementById('auto-status').textContent='Last completed cycle: '+new Date(latest.time).toLocaleString()+' · '+data.length+' archived cycles';const e=document.getElementById('auto-results');e.textContent='';for(const x of latest.experiments){const p=document.createElement('p');p.textContent=x.name+': '+x.observed+' (expected '+x.expected+', z='+x.z_score+')'+(x.flag?' · REVIEW FLAG':'');e.appendChild(p)}}catch(e){document.getElementById('auto-status').textContent=e.message}}loadAuto();setInterval(loadAuto,60000);</script></main><script>async function load(){const r=await fetch('/api/results');const a=await r.json();document.getElementById('results').innerHTML=a.map(x=>`<tr><td>${x.created.slice(0,19)}</td><td>${x.trials}</td><td>${x.estimate.toFixed(6)}</td><td>${x.deviation.toFixed(6)}</td></tr>`).join('')||'<tr><td colspan="4">No experiments yet</td></tr>'}document.getElementById('run').onclick=async()=>{const b=document.getElementById('run');b.disabled=true;document.getElementById('message').textContent='Running…';try{const r=await fetch('/api/run',{method:'POST'});if(!r.ok)throw Error('Run failed');const d=await r.json();document.getElementById('message').textContent=`Estimate ${d.estimate.toFixed(6)} · Error ${d.deviation.toFixed(6)}`;await load()}catch(e){document.getElementById('message').textContent=e.message}finally{b.disabled=false}};load();</script></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AETHER ∞ — Autonomous Research Dashboard</title>
+  <style>
+    body { background: #0a101d; color: #edf3ff; font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 36px 20px; line-height: 1.5; }
+    main { max-width: 960px; margin: auto; }
+    h1 { font-size: clamp(32px, 6vw, 56px); margin-bottom: 4px; font-weight: 800; tracking: -0.02em; }
+    p { color: #aebcd1; }
+    button { background: #8ee0d0; color: #06131a; border: 0; border-radius: 8px; padding: 12px 20px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #71cfbe; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .panel { background: #151f32; border: 1px solid #34445c; border-radius: 14px; padding: 22px; margin-top: 24px; }
+    .status-badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-left: 8px; }
+    .status-completed { background: #1a4d38; color: #6ee7b7; border: 1px solid #276f52; }
+    .status-failed { background: #4d1a1a; color: #fca5a5; border: 1px solid #7f1d1d; }
+    .badge-baseline { background: #1e293b; color: #94a3b8; border: 1px solid #475569; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+    .badge-discovery { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+    .flag-review { background: #78350f; color: #fde68a; border: 1px solid #92400e; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+    td, th { text-align: left; border-bottom: 1px solid #28374d; padding: 10px 6px; }
+    th { color: #8da2c0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    small { color: #9fb0c6; display: block; margin-top: 12px; }
+    .error-box { background: #3b1818; border: 1px solid #7f1d1d; color: #fca5a5; padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 13px; }
+    .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px; }
+    .info-card { background: #0f172a; padding: 12px 16px; border-radius: 8px; border: 1px solid #1e293b; }
+    .info-card label { display: block; font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600; }
+    .info-card val { display: block; font-size: 16px; font-weight: 700; color: #f8fafc; margin-top: 2px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>AETHER ∞</h1>
+  <p>Autonomous Statistical Research Dashboard · Transparent Simulations & Validation Controls</p>
+
+  <!-- Autonomous Scheduled Research Section -->
+  <div class="panel">
+    <h2>Autonomous Research Laboratory</h2>
+    <p>Scheduled hourly via GitHub Actions. Computes statistical significance thresholds (|z| &gt; 3.29, p &lt; 0.001) across simulated baseline experiments.</p>
+
+    <div id="auto-summary" class="info-grid" style="display:none;">
+      <div class="info-card">
+        <label>Last Completed Run</label>
+        <val id="val-last-run">—</val>
+      </div>
+      <div class="info-card">
+        <label>Status</label>
+        <val id="val-status">—</val>
+      </div>
+      <div class="info-card">
+        <label>Archived Cycles</label>
+        <val id="val-cycles">—</val>
+      </div>
+      <div class="info-card">
+        <label>Significance Threshold</label>
+        <val id="val-threshold">|z| &gt; 3.29</val>
+      </div>
+    </div>
+
+    <p id="auto-status" role="status">Loading scheduled research records…</p>
+    <div id="auto-errors"></div>
+
+    <div style="overflow-x:auto;">
+      <table id="auto-table" style="display:none;">
+        <thead>
+          <tr>
+            <th>Experiment</th>
+            <th>Type</th>
+            <th>Observed</th>
+            <th>Expected</th>
+            <th>z-score</th>
+            <th>Trials</th>
+            <th>Result Flag</th>
+          </tr>
+        </thead>
+        <tbody id="auto-experiments"></tbody>
+      </table>
+    </div>
+
+    <small id="auto-interpretation" style="margin-top: 16px; font-style: italic;"></small>
+  </div>
+
+  <!-- Interactive Monte Carlo Demo Section -->
+  <div class="panel">
+    <h2>Interactive Monte Carlo Verification</h2>
+    <p>Run 20,000 uniform samples in a unit square to estimate π. Demonstrates mathematical baseline simulation on demand.</p>
+    <button id="run">Run verification trial</button>
+    <p id="message" role="status" style="display:inline-block; margin-left: 12px; font-weight: 600;">Ready.</p>
+
+    <div style="overflow-x:auto; margin-top: 16px;">
+      <table>
+        <thead>
+          <tr>
+            <th>UTC Date</th>
+            <th>Trials</th>
+            <th>Estimate</th>
+            <th>Expected</th>
+            <th>Absolute Error</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+    <small>Interactive runs are recorded locally in sqlite. Automated scheduled cycles run independently.</small>
+  </div>
+</main>
+
+<script>
+async function loadAuto() {
+  const autoStatus = document.getElementById('auto-status');
+  const autoSummary = document.getElementById('auto-summary');
+  const autoTable = document.getElementById('auto-table');
+  const autoExperiments = document.getElementById('auto-experiments');
+  const autoErrors = document.getElementById('auto-errors');
+  const autoInterpretation = document.getElementById('auto-interpretation');
+
+  let data = null;
+  let errorSource = null;
+
+  // Try local API endpoint first, fallback to raw GitHub
+  try {
+    const r = await fetch('/api/research');
+    if (r.ok) {
+      data = await r.json();
+    }
+  } catch (e) {
+    // Ignore, fallback to github raw
+  }
+
+  if (!data || !data.length) {
+    try {
+      const r = await fetch('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json?t=' + Date.now(), { cache: 'no-store' });
+      if (r.ok) {
+        data = await r.json();
+      } else {
+        errorSource = 'No completed scheduled cycles available yet.';
+      }
+    } catch (e) {
+      errorSource = 'Failed to load scheduled research data: ' + e.message;
+    }
+  }
+
+  if (!data || !data.length) {
+    autoStatus.textContent = errorSource || 'No scheduled research cycles found.';
+    return;
+  }
+
+  autoStatus.style.display = 'none';
+  autoSummary.style.display = 'grid';
+  autoTable.style.display = 'table';
+
+  const latest = data[0];
+  const lastTime = new Date(latest.time).toLocaleString();
+  document.getElementById('val-last-run').textContent = lastTime;
+  document.getElementById('val-status').innerHTML = `<span class="status-badge ${latest.status === 'completed' ? 'status-completed' : 'status-failed'}">${latest.status || 'completed'}</span>`;
+  document.getElementById('val-cycles').textContent = data.length;
+  document.getElementById('val-threshold').textContent = '|z| > ' + (latest.z_threshold || 3.29);
+
+  if (latest.interpretation) {
+    autoInterpretation.textContent = latest.interpretation;
+  }
+
+  // Display errors if present
+  autoErrors.innerHTML = '';
+  if (latest.errors && latest.errors.length > 0) {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'error-box';
+    errDiv.innerHTML = '<strong>Recorded cycle errors:</strong><ul>' +
+      latest.errors.map(err => `<li>${err.name}: ${err.error}</li>`).join('') + '</ul>';
+    autoErrors.appendChild(errDiv);
+  }
+
+  // Populate experiment rows
+  autoExperiments.innerHTML = '';
+  if (latest.experiments && latest.experiments.length > 0) {
+    latest.experiments.forEach(exp => {
+      const tr = document.createElement('tr');
+      const categoryBadge = exp.category === 'discovery' ?
+        '<span class="badge-discovery">Discovery</span>' :
+        '<span class="badge-baseline">Known Baseline</span>';
+
+      const flagBadge = exp.flag ?
+        '<span class="flag-review">Flag (|z| &gt; 3.29)</span>' :
+        '<span style="color:#64748b">Normal (|z| &le; 3.29)</span>';
+
+      tr.innerHTML = `
+        <td><strong>${exp.name}</strong><br><small style="margin:0;color:#64748b">${exp.description || ''}</small></td>
+        <td>${categoryBadge}</td>
+        <td>${exp.observed}</td>
+        <td>${exp.expected}</td>
+        <td>${exp.z_score}</td>
+        <td>${exp.trials.toLocaleString()}</td>
+        <td>${flagBadge}</td>
+      `;
+      autoExperiments.appendChild(tr);
+    });
+  }
+}
+
+async function loadInteractive() {
+  try {
+    const r = await fetch('/api/results');
+    const data = await r.json();
+    const tbody = document.getElementById('results');
+    tbody.innerHTML = data.map(x => `
+      <tr>
+        <td>${x.created.slice(0,19).replace('T', ' ')}</td>
+        <td>${x.trials.toLocaleString()}</td>
+        <td>${x.estimate.toFixed(6)}</td>
+        <td>${x.expected.toFixed(6)}</td>
+        <td>${x.deviation.toFixed(6)}</td>
+        <td><span class="status-badge status-completed">${x.status}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6">No interactive experiments run yet.</td></tr>';
+  } catch (e) {
+    console.error('Error loading interactive results:', e);
+  }
+}
+
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  const msg = document.getElementById('message');
+  btn.disabled = true;
+  msg.textContent = 'Running sample…';
+  try {
+    const r = await fetch('/api/run', { method: 'POST' });
+    if (!r.ok) throw Error('Run failed');
+    const d = await r.json();
+    msg.textContent = `Estimate: ${d.estimate.toFixed(6)} · Dev: ${d.deviation.toFixed(6)}`;
+    await loadInteractive();
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+loadAuto();
+loadInteractive();
+setInterval(loadAuto, 60000);
+</script>
+</body>
+</html>
