@@ -1,0 +1,24 @@
+name: AETHER research archive validation
+
+on:
+  pull_request:
+    paths:
+      - 'data/research.json'
+      - 'tests/test_research_archive.py'
+      - '.github/workflows/research-archive-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate committed research archive (read-only)
+        run: python -m unittest discover -s tests -p 'test_research_archive.py' -v
