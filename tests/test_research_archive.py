@@ -58,5 +58,23 @@ class ResearchArchiveTests(unittest.TestCase):
                     self.assertIsInstance(item["flag"], bool)
 
 
+    def test_flag_threshold_consistency(self):
+        """Check flags against the documented |z| > 3.29 threshold.
+
+        research.py computes flags before rounding z_score to 3 decimals,
+        so a recorded score within 0.0005 of the threshold is ambiguous.
+        """
+        threshold = 3.29
+        rounding_margin = 0.0005
+        for index, cycle in enumerate(self.records):
+            for item in cycle["experiments"]:
+                with self.subTest(cycle=index, experiment=item["name"]):
+                    magnitude = abs(item["z_score"])
+                    if magnitude < threshold - rounding_margin:
+                        self.assertFalse(item["flag"])
+                    elif magnitude > threshold + rounding_margin:
+                        self.assertTrue(item["flag"])
+
+
 if __name__ == "__main__":
     unittest.main()
