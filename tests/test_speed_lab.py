@@ -10,6 +10,7 @@ from speed_lab import (
     METHODS,
     antithetic_1d,
     benchmark,
+    benchmark_matched_time,
     circle_hits,
     conditional_1d,
 )
@@ -124,6 +125,44 @@ class SpeedLabTests(unittest.TestCase):
                     2 * large["results"][name]["theoretical_standard_error"],
                     places=12,
                 )
+
+
+    def test_matched_time_trials_are_bounded_and_labeled(self):
+        data = benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=31)
+        self.assertEqual(data["replications"], 2)
+        self.assertEqual(data["seed"], 31)
+        self.assertIn("not identical elapsed time", data["methodology"])
+        self.assertGreater(data["calibration_seconds_total"], 0)
+        self.assertEqual(set(data["results"]), set(METHODS))
+        total_units = 0
+        for name, metrics in data["results"].items():
+            with self.subTest(name=name):
+                n = metrics["sampling_units_per_replication"]
+                total_units += n * data["replications"]
+                self.assertGreaterEqual(n, 100)
+                self.assertLessEqual(n, 100_000)
+                self.assertGreater(metrics["median_observed_seconds"], 0)
+                self.assertLessEqual(metrics["min_observed_seconds"],
+                                     metrics["median_observed_seconds"])
+                self.assertLessEqual(metrics["median_observed_seconds"],
+                                     metrics["max_observed_seconds"])
+                self.assertTrue(math.isfinite(metrics["rmse"]))
+                self.assertGreater(metrics["theoretical_standard_error"], 0)
+        self.assertLessEqual(total_units, MAX_TOTAL_SAMPLES)
+
+    def test_matched_time_rejects_unbounded_inputs(self):
+        for kwargs in (
+            {"budget_seconds": 0},
+            {"budget_seconds": 0.5},
+            {"budget_seconds": float("nan")},
+            {"budget_seconds": True},
+            {"replicates": 1},
+            {"replicates": 31},
+            {"replicates": True},
+            {"seed": 1.1},
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                benchmark_matched_time(**kwargs)
 
     def test_does_not_write_research_archive(self):
         # The script is an isolated, pure experiment; no output persisted.
