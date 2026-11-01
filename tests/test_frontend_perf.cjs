@@ -39,8 +39,15 @@ let archiveResponse = [{
   experiments: [{ name: 'Known baseline', observed: 3.14, expected: 3.14159, z_score: 0.12, flag: false }],
 }];
 let fetchFailure = false;
+let hangNext = false;
 const fakeFetch = async (url, options) => {
   requests.push({ url, options });
+  if (hangNext) {
+    hangNext = false;
+    return new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('Timed out')), { once: true });
+    });
+  }
   if (fetchFailure) throw new Error('Network unavailable');
   return {
     ok: true,
@@ -48,12 +55,19 @@ const fakeFetch = async (url, options) => {
   };
 };
 const fakeInterval = (fn, ms) => { intervals.push({ fn, ms }); };
+const timeoutTasks = [];
+const fakeSetTimeout = (fn, ms) => {
+  const task = { fn, ms, active: true };
+  timeoutTasks.push(task);
+  return task;
+};
+const fakeClearTimeout = task => { task.active = false; };
 let clockMs = 0;
 class FakeDate extends Date { static now() { return clockMs; } }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
-  vm.runInNewContext(script, { document, fetch: fakeFetch, setInterval: fakeInterval, Date: FakeDate });
+  vm.runInNewContext(script, { document, fetch: fakeFetch, setInterval: fakeInterval, setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout, AbortController, Date: FakeDate });
   await settle();
 
   assert.equal(requests.length, 1, 'Should load once at startup');
@@ -140,5 +154,27 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes['auto-results'].entries.length, 0);
   assert.ok(nodes['auto-status'].textContent.includes('archive unavailable'));
 
-  console.log('Frontend polling regression checks passed: caching, throttling, visibility, overlap, completed/partial-failure status, and safe error summary, stale-data clearing, and recovery.');
+  // A stalled network request must time out, clear the stale display, and unblock a later refresh.
+  archiveResponse = [{ time: '2026-11-01T06:00:00Z', status: 'completed', errors: [], experiments: [] }];
+  hangNext = true;
+  clockMs += 300000;
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 8);
+  const timeout = timeoutTasks.at(-1);
+  assert.equal(timeout.ms, 15000, 'Archive fetch must have a bounded timeout');
+  assert.equal(timeout.active, true, 'Timeout must remain active while fetch is stalled');
+  timeout.fn();
+  await settle();
+  assert.equal(timeout.active, false, 'Timeout must be cleared after an aborted request');
+  assert.equal(nodes['auto-results'].entries.length, 0, 'Timed-out archive must not display stale results');
+  assert.ok(nodes['auto-status'].textContent.includes('archive unavailable'));
+  clockMs += 300000;
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 9, 'A timed-out fetch must not block the next refresh');
+  assert.ok(nodes['auto-status'].textContent.includes('Status: completed'));
+  assert.equal(timeoutTasks.at(-1).active, false, 'Successful fetch must clear its timeout');
+
+  console.log('Frontend polling regression checks passed: caching, throttling, visibility, overlap, accurate status, stale-data clearing, timeout/abort, and recovery.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
