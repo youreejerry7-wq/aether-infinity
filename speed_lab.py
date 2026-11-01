@@ -80,18 +80,38 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             estimates.append(estimate)
             durations.append(elapsed)
         errors = [estimate - math.pi for estimate in estimates]
+        # Analytic SE applies to independent units for the first two methods.
+        # For hit-or-miss, Var(4 I) = 4*pi - pi**2.
+        # For conditional sampling, E[(4 sqrt(1-X**2))**2] = 32/3.
+        # Antithetic pairs are dependent internally; do not apply either SE.
+        analytic_variance = {
+            "circle_hits": 4 * math.pi - math.pi ** 2,
+            "conditional_1d": 32 / 3 - math.pi ** 2,
+        }.get(name)
+        rmse = math.sqrt(statistics.mean(error * error for error in errors))
+        median_time = statistics.median(durations)
         results[name] = {
-            "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
+            "rmse": rmse,
             "mean_absolute_error": statistics.mean(abs(error) for error in errors),
             "average_estimate": statistics.mean(estimates),
-            "median_seconds_per_replication": statistics.median(durations),
+            "median_seconds_per_replication": median_time,
             "random_draws_per_sampling_unit": 2 if name == "circle_hits" else 1,
+            "theoretical_standard_error": (
+                math.sqrt(analytic_variance / samples) if analytic_variance is not None else None
+            ),
+            # Descriptive, seed-specific error-vs-time metric; lower is better.
+            "observed_rmse_squared_seconds": rmse * rmse * median_time,
         }
     baseline_rmse = results["circle_hits"]["rmse"]
     baseline_time = results["circle_hits"]["median_seconds_per_replication"]
+    baseline_error_time = results["circle_hits"]["observed_rmse_squared_seconds"]
     for value in results.values():
         value["rmse_improvement_factor_vs_baseline"] = baseline_rmse / value["rmse"] if value["rmse"] else None
         value["time_speedup_factor_vs_baseline"] = baseline_time / value["median_seconds_per_replication"] if value["median_seconds_per_replication"] else None
+        value["observed_error_time_efficiency_vs_baseline"] = (
+            baseline_error_time / value["observed_rmse_squared_seconds"]
+            if value["observed_rmse_squared_seconds"] else None
+        )
 
     return {
         "reference": "pi",
@@ -99,7 +119,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "samples_per_replication": samples,
         "replications": replicates,
         "seed": seed,
-        "methodology": "Equal independent sampling units, not equal computation; random errors and runtime vary. No quantum hardware.",
+        "methodology": "Equal independent sampling units, not equal computation. Theoretical SE is analytic only for independent hit-or-miss and conditional estimators. Observed RMSE^2 times median wall-time is a seed- and machine-specific diagnostic, not a fixed-accuracy or quantum-speed claim.",
         "results": results,
     }
 
