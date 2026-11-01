@@ -58,6 +58,15 @@ class ResearchArchiveTests(unittest.TestCase):
                     self.assertIsInstance(item["flag"], bool)
 
 
+    def test_research_only_commit_skips_render(self):
+        """Synthetic archive updates should not trigger production rebuilds."""
+        workflow = (ARCHIVE.parents[1] / ".github" / "workflows" / "research.yml")
+        content = workflow.read_text(encoding="utf-8")
+        self.assertIn(
+            'git commit -m "Record scheduled research cycle [skip render]"',
+            content,
+        )
+
     def test_flag_threshold_consistency(self):
         """Check flags against the documented |z| > 3.29 threshold.
 
