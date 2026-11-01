@@ -88,6 +88,32 @@ class SpeedLabTests(unittest.TestCase):
             )
             self.assertGreater(result["observed_error_time_efficiency_vs_baseline"], 0)
 
+    def test_equal_wall_time_projection_is_labeled_and_algebraically_consistent(self):
+        data = benchmark(samples=2000, replicates=4, seed=13)
+        results = data["results"]
+        baseline = results["circle_hits"]
+        baseline_time = baseline["median_seconds_per_replication"]
+        self.assertGreater(baseline_time, 0)
+        self.assertAlmostEqual(
+            baseline["projected_theoretical_se_at_baseline_time"],
+            baseline["theoretical_standard_error"], places=12,
+        )
+        self.assertAlmostEqual(
+            baseline["theoretical_error_time_efficiency_vs_baseline"], 1.0,
+            places=12,
+        )
+        for name, metrics in results.items():
+            with self.subTest(name=name):
+                expected = metrics["theoretical_standard_error"] * math.sqrt(
+                    metrics["median_seconds_per_replication"] / baseline_time
+                )
+                self.assertAlmostEqual(
+                    metrics["projected_theoretical_se_at_baseline_time"],
+                    expected, places=12,
+                )
+                self.assertGreater(metrics["theoretical_error_time_efficiency_vs_baseline"], 0)
+        self.assertIn("not measured equal-time trials", data["methodology"])
+
     def test_standard_errors_scale_with_independent_units(self):
         small = benchmark(samples=400, replicates=2, seed=9)
         large = benchmark(samples=1600, replicates=2, seed=9)
