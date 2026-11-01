@@ -49,6 +49,12 @@ let resolveDelayedResults;
 const fetch = async (url, options) => {
   if (url === '/api/results') {
     if (resultsMode === 'delayed') return new Promise(resolve => { resolveDelayedResults = resolve; });
+    if (resultsMode === 'hang') {
+      assert.ok(options && options.signal, 'GET results must have an abort signal');
+      return new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('GET timed out')), { once: true });
+      });
+    }
     if (resultsMode === 'http-error') return { ok: false, json: async () => rows };
     if (resultsMode === 'malformed') return { ok: true, json: async () => ({ unexpected: 'object' }) };
     return { ok: true, json: async () => rows };
@@ -152,6 +158,21 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.run.disabled, false, 'Aborted POST must restore button');
   assert.equal(pendingTimeout.active, false, 'Clear timeout after aborted POST');
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
+
+  // A POST may succeed but its follow-up results GET may hang. The button must recover.
+  postMode = 'ok';
+  resultsMode = 'hang';
+  const runWithHangingRefresh = nodes.run.onclick();
+  await settle();
+  assert.equal(nodes.run.disabled, true, 'Button stays disabled while refreshing results');
+  const getTimeout = timers.at(-1);
+  assert.equal(getTimeout.ms, 60000, 'Results GET must have a bounded 60-second timeout');
+  assert.equal(getTimeout.active, true, 'Results GET timeout must be active while stalled');
+  getTimeout.fn();
+  await runWithHangingRefresh;
+  assert.equal(nodes.run.disabled, false, 'Button recovers after a stalled follow-up GET');
+  assert.equal(getTimeout.active, false, 'Results GET timeout must be cleared');
+  assert.equal(nodes.results.children[0].children[0].textContent, 'Experiments temporarily unavailable.');
 
   console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, stale-response race, and safe POST failure handling.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
