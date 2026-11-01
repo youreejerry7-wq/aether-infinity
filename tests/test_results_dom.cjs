@@ -39,8 +39,13 @@ let rows = [{
   created: hostile, trials: 20000, estimate: 3.14, deviation: 0.00159265,
 }];
 let postCalls = 0;
+let resultsMode = 'ok';
 const fetch = async (url, options) => {
-  if (url === '/api/results') return { json: async () => rows };
+  if (url === '/api/results') {
+    if (resultsMode === 'http-error') return { ok: false, json: async () => rows };
+    if (resultsMode === 'malformed') return { ok: true, json: async () => ({ unexpected: 'object' }) };
+    return { ok: true, json: async () => rows };
+  }
   assert.equal(url, '/api/run');
   assert.equal(options.method, 'POST');
   postCalls++;
@@ -73,5 +78,27 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.run.disabled, false, 'Button re-enabled after success');
   assert.ok(nodes.message.textContent.includes('Estimate 3.140000'));
   assert.equal(nodes.results.children.length, 1, 'Results reload after run');
-  console.log('Demo results DOM regression passed: inert text, empty state, and run/reload.');
+
+  resultsMode = 'http-error';
+  await context.load();
+  assert.equal(nodes.results.children.length, 1, 'Failed HTTP request must clear stale results');
+  assert.equal(nodes.results.children[0].children[0].textContent, 'Experiments temporarily unavailable.');
+  assert.equal(nodes.results.children[0].children[0].colSpan, 4);
+
+  resultsMode = 'malformed';
+  await context.load();
+  assert.equal(nodes.results.children[0].children[0].textContent, 'Experiments temporarily unavailable.',
+    'Malformed response must not render as a successful empty result');
+
+  resultsMode = 'ok';
+  rows = [{ created: '2026-11-01T05:00:00Z', trials: 20000, estimate: 'invalid', deviation: 0.1 }];
+  await context.load();
+  assert.equal(nodes.results.children[0].children[0].textContent, 'Experiments temporarily unavailable.',
+    'Invalid row must not cause a partial render or leak a runtime error');
+
+  rows = [{ created: '2026-11-01T05:00:00Z', trials: 20000, estimate: 3.14, deviation: 0.00159265 }];
+  await context.load();
+  assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-01T05:00:00',
+    'Valid results should recover after transient failure');
+  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, and recovery.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
