@@ -49,6 +49,32 @@ class SpeedLabTests(unittest.TestCase):
             self.assertGreaterEqual(metrics["median_seconds_per_replication"], 0)
             self.assertGreater(metrics["rmse_improvement_factor_vs_baseline"], 0)
 
+    def test_analytic_errors_and_observed_error_time_are_explicit(self):
+        data = benchmark(samples=1000, replicates=4, seed=17)
+        metrics = data["results"]
+        self.assertAlmostEqual(
+            metrics["circle_hits"]["theoretical_standard_error"],
+            math.sqrt((4 * math.pi - math.pi ** 2) / 1000),
+        )
+        self.assertAlmostEqual(
+            metrics["conditional_1d"]["theoretical_standard_error"],
+            math.sqrt((32 / 3 - math.pi ** 2) / 1000),
+        )
+        self.assertLess(
+            metrics["conditional_1d"]["theoretical_standard_error"],
+            metrics["circle_hits"]["theoretical_standard_error"],
+        )
+        self.assertIsNone(metrics["antithetic_1d"]["theoretical_standard_error"])
+        self.assertAlmostEqual(
+            metrics["circle_hits"]["observed_error_time_efficiency_vs_baseline"], 1.0,
+        )
+        for result in metrics.values():
+            self.assertAlmostEqual(
+                result["observed_rmse_squared_seconds"],
+                result["rmse"] ** 2 * result["median_seconds_per_replication"],
+            )
+            self.assertGreater(result["observed_error_time_efficiency_vs_baseline"], 0)
+
     def test_does_not_write_research_archive(self):
         # The script is an isolated, pure experiment; no output persisted.
         before = Path("data/research.json")
