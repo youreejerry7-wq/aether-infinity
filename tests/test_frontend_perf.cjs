@@ -38,8 +38,10 @@ let archiveResponse = [{
   time: '2026-10-31T00:00:00Z', status: 'completed', errors: [],
   experiments: [{ name: 'Known baseline', observed: 3.14, expected: 3.14159, z_score: 0.12, flag: false }],
 }];
+let fetchFailure = false;
 const fakeFetch = async (url, options) => {
   requests.push({ url, options });
+  if (fetchFailure) throw new Error('Network unavailable');
   return {
     ok: true,
     json: async () => archiveResponse,
@@ -107,5 +109,36 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
   assert.equal(requests.length, 4, 'Overlapping refreshes must be suppressed');
 
-  console.log('Frontend polling regression checks passed: caching, throttling, visibility, overlap, completed/partial-failure status, and safe error summary.');
+
+  // Failed refreshes must not leave stale cycle data looking current.
+  fetchFailure = true;
+  clockMs += 300000;
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 5);
+  assert.equal(nodes['auto-results'].entries.length, 0,
+    'A failed refresh must clear previously rendered cycle details');
+  assert.ok(nodes['auto-status'].textContent.includes('archive unavailable'));
+  assert.ok(!nodes['auto-status'].textContent.includes('Network unavailable'),
+    'Do not expose arbitrary network diagnostics');
+
+  // Recovery should restore accurate status on the next allowed refresh.
+  fetchFailure = false;
+  clockMs += 300000;
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 6);
+  assert.ok(nodes['auto-status'].textContent.includes('Status: partial_failure'));
+  assert.equal(nodes['auto-results'].entries.length, 1);
+
+  // A malformed/empty archive must also clear the prior successful display.
+  archiveResponse = [];
+  clockMs += 300000;
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 7);
+  assert.equal(nodes['auto-results'].entries.length, 0);
+  assert.ok(nodes['auto-status'].textContent.includes('archive unavailable'));
+
+  console.log('Frontend polling regression checks passed: caching, throttling, visibility, overlap, completed/partial-failure status, and safe error summary, stale-data clearing, and recovery.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
