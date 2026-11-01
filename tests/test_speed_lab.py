@@ -34,6 +34,8 @@ class SpeedLabTests(unittest.TestCase):
             {"samples": 0},
             {"replicates": 1},
             {"samples": MAX_TOTAL_SAMPLES, "replicates": 2},
+            # Each of the three methods counts against the shared budget.
+            {"samples": 250_000, "replicates": 3},
             {"samples": True},
             {"seed": 0.3},
         ):
@@ -149,6 +151,12 @@ class SpeedLabTests(unittest.TestCase):
                 self.assertTrue(math.isfinite(metrics["rmse"]))
                 self.assertGreater(metrics["theoretical_standard_error"], 0)
         self.assertLessEqual(total_units, MAX_TOTAL_SAMPLES)
+        self.assertEqual(data["calibration_sampling_units"], 9_000)
+        self.assertEqual(data["total_sampling_units_including_calibration"],
+                         total_units + data["calibration_sampling_units"])
+        self.assertLessEqual(data["total_sampling_units_including_calibration"],
+                             data["sampling_unit_budget"])
+        self.assertEqual(data["sampling_unit_budget"], MAX_TOTAL_SAMPLES)
 
     def test_matched_time_rejects_unbounded_inputs(self):
         for kwargs in (
