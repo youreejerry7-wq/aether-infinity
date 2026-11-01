@@ -64,7 +64,20 @@ class SpeedLabTests(unittest.TestCase):
             metrics["conditional_1d"]["theoretical_standard_error"],
             metrics["circle_hits"]["theoretical_standard_error"],
         )
-        self.assertIsNone(metrics["antithetic_1d"]["theoretical_standard_error"])
+        # Deterministic quadrature of the correlated pair's second moment.
+        # Reference is independently converged to ~0.10972585 per pair.
+        self.assertAlmostEqual(
+            metrics["antithetic_1d"]["theoretical_standard_error"] ** 2 * 1000,
+            0.10972585,
+            delta=0.00001,
+        )
+        self.assertLess(
+            metrics["antithetic_1d"]["theoretical_standard_error"],
+            metrics["conditional_1d"]["theoretical_standard_error"],
+        )
+        self.assertEqual(metrics["antithetic_1d"]["standard_error_basis"], "numerical_midpoint_16384")
+        self.assertEqual(metrics["antithetic_1d"]["integrand_evaluations_per_sampling_unit"], 2)
+        self.assertEqual(metrics["circle_hits"]["standard_error_basis"], "analytic")
         self.assertAlmostEqual(
             metrics["circle_hits"]["observed_error_time_efficiency_vs_baseline"], 1.0,
         )
@@ -74,6 +87,17 @@ class SpeedLabTests(unittest.TestCase):
                 result["rmse"] ** 2 * result["median_seconds_per_replication"],
             )
             self.assertGreater(result["observed_error_time_efficiency_vs_baseline"], 0)
+
+    def test_standard_errors_scale_with_independent_units(self):
+        small = benchmark(samples=400, replicates=2, seed=9)
+        large = benchmark(samples=1600, replicates=2, seed=9)
+        for name in METHODS:
+            with self.subTest(name=name):
+                self.assertAlmostEqual(
+                    small["results"][name]["theoretical_standard_error"],
+                    2 * large["results"][name]["theoretical_standard_error"],
+                    places=12,
+                )
 
     def test_does_not_write_research_archive(self):
         # The script is an isolated, pure experiment; no output persisted.
