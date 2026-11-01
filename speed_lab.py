@@ -51,6 +51,21 @@ METHODS = {
 }
 
 
+def antithetic_unit_variance_midpoint(intervals=16_384):
+    """Approximate Var[2(sqrt(1-X^2)+sqrt(1-(1-X)^2))] for X~U(0,1).
+
+    Independent antithetic *pairs* are sampling units. Their two function
+    evaluations are correlated, so independent-function SE formulas are wrong.
+    This fixed-grid quadrature is deterministic, not an exact analytic result.
+    """
+    integral = math.fsum(
+        math.sqrt((1.0 - (x := (i + 0.5) / intervals) ** 2)
+                  * (1.0 - (1.0 - x) ** 2))
+        for i in range(intervals)
+    ) / intervals
+    return 16.0 / 3.0 + 8.0 * integral - math.pi ** 2
+
+
 def benchmark(samples=10_000, replicates=24, seed=2026):
     """Return reproducible accuracy metrics and measured local timings.
 
@@ -80,14 +95,13 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             estimates.append(estimate)
             durations.append(elapsed)
         errors = [estimate - math.pi for estimate in estimates]
-        # Analytic SE applies to independent units for the first two methods.
-        # For hit-or-miss, Var(4 I) = 4*pi - pi**2.
-        # For conditional sampling, E[(4 sqrt(1-X**2))**2] = 32/3.
-        # Antithetic pairs are dependent internally; do not apply either SE.
-        analytic_variance = {
+        # All replications average independent sampling units. The antithetic
+        # unit is a correlated pair, whose variance is integrated numerically.
+        unit_variance = {
             "circle_hits": 4 * math.pi - math.pi ** 2,
             "conditional_1d": 32 / 3 - math.pi ** 2,
-        }.get(name)
+            "antithetic_1d": antithetic_unit_variance_midpoint(),
+        }[name]
         rmse = math.sqrt(statistics.mean(error * error for error in errors))
         median_time = statistics.median(durations)
         results[name] = {
@@ -96,8 +110,10 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             "average_estimate": statistics.mean(estimates),
             "median_seconds_per_replication": median_time,
             "random_draws_per_sampling_unit": 2 if name == "circle_hits" else 1,
+            "integrand_evaluations_per_sampling_unit": 2 if name == "antithetic_1d" else 1,
+            "standard_error_basis": "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic",
             "theoretical_standard_error": (
-                math.sqrt(analytic_variance / samples) if analytic_variance is not None else None
+                math.sqrt(unit_variance / samples)
             ),
             # Descriptive, seed-specific error-vs-time metric; lower is better.
             "observed_rmse_squared_seconds": rmse * rmse * median_time,
@@ -119,7 +135,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "samples_per_replication": samples,
         "replications": replicates,
         "seed": seed,
-        "methodology": "Equal independent sampling units, not equal computation. Theoretical SE is analytic only for independent hit-or-miss and conditional estimators. Observed RMSE^2 times median wall-time is a seed- and machine-specific diagnostic, not a fixed-accuracy or quantum-speed claim.",
+        "methodology": "Equal independent sampling units, not equal computation. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Observed RMSE^2 times median wall-time is a seed- and machine-specific diagnostic, not a fixed-accuracy or quantum-speed claim.",
         "results": results,
     }
 
