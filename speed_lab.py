@@ -79,8 +79,8 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         raise ValueError("replicates must be an integer >= 2")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("seed must be an integer")
-    if samples * replicates > MAX_TOTAL_SAMPLES:
-        raise ValueError(f"samples * replicates must not exceed {MAX_TOTAL_SAMPLES:,}")
+    if samples * replicates * len(METHODS) > MAX_TOTAL_SAMPLES:
+        raise ValueError(f"total sampling units across all methods must not exceed {MAX_TOTAL_SAMPLES:,}")
 
     results = {}
     for name, method in METHODS.items():
@@ -176,8 +176,9 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
 
     results = {}
     calibration_seconds = 0.0
-    # Three methods share the global sampling budget; cap each independently.
-    max_samples = min(100_000, MAX_TOTAL_SAMPLES // (len(METHODS) * replicates))
+    # Include calibration calls in the global sampling-unit budget.
+    calibration_units = len(METHODS) * 3 * 1000
+    max_samples = min(100_000, (MAX_TOTAL_SAMPLES - calibration_units) // (len(METHODS) * replicates))
     for method_index, (name, method) in enumerate(METHODS.items()):
         calibration_times = []
         for i in range(3):
@@ -223,6 +224,13 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         "replications": replicates,
         "seed": seed,
         "calibration_seconds_total": calibration_seconds,
+        "calibration_sampling_units": calibration_units,
+        "total_sampling_units_including_calibration": (
+            calibration_units + replicates * sum(
+                item["sampling_units_per_replication"] for item in results.values()
+            )
+        ),
+        "sampling_unit_budget": MAX_TOTAL_SAMPLES,
         "results": results,
     }
 
