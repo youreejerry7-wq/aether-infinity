@@ -40,8 +40,10 @@ let rows = [{
 }];
 let postCalls = 0;
 let resultsMode = 'ok';
+let resolveDelayedResults;
 const fetch = async (url, options) => {
   if (url === '/api/results') {
+    if (resultsMode === 'delayed') return new Promise(resolve => { resolveDelayedResults = resolve; });
     if (resultsMode === 'http-error') return { ok: false, json: async () => rows };
     if (resultsMode === 'malformed') return { ok: true, json: async () => ({ unexpected: 'object' }) };
     return { ok: true, json: async () => rows };
@@ -100,5 +102,20 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await context.load();
   assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-01T05:00:00',
     'Valid results should recover after transient failure');
-  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, and recovery.');
+
+  // A slower, older GET must never overwrite a newer successful refresh.
+  resultsMode = 'delayed';
+  const olderRequest = context.load();
+  assert.equal(typeof resolveDelayedResults, 'function');
+  resultsMode = 'ok';
+  rows = [{ created: '2026-11-01T06:00:00Z', trials: 20000, estimate: 3.14, deviation: 0.00159265 }];
+  await context.load();
+  assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-01T06:00:00');
+  resolveDelayedResults({ ok: true, json: async () => [{
+    created: '2026-11-01T04:00:00Z', trials: 20000, estimate: 3.14, deviation: 0.00159265,
+  }] });
+  await olderRequest;
+  assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-01T06:00:00',
+    'Late stale results must not overwrite the most recent successful response');
+  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, and stale-response race.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
