@@ -43,3 +43,29 @@ jobs:
           echo "GET /: HTTP=$code total_seconds=$seconds bytes=$bytes"
           test "$code" = 200
           grep -q 'AETHER' /tmp/aether-home.html
+
+      - name: Measure follow-up responses and public archive payload
+        # Follow-up requests measure a warm-ish path, not a guaranteed warm host.
+        # This is observation only: failures are reported in logs, not as PR code failures.
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in health homepage archive; do
+            case "$endpoint" in
+              health) url="https://aether-infinity.onrender.com/health" ;;
+              homepage) url="https://aether-infinity.onrender.com/" ;;
+              archive) url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json" ;;
+            esac
+            output="/tmp/aether-followup-${endpoint}"
+            metrics=$(curl -sS -L --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o "$output" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r code ttfb total bytes <<< "$metrics"
+            echo "Follow-up GET $endpoint: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+            test "$code" = 200
+            case "$endpoint" in
+              health) python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$output" ;;
+              homepage) grep -q 'AETHER' "$output" ;;
+              archive) python3 -c 'import json,sys; a=json.load(open(sys.argv[1])); assert isinstance(a,list) and len(a)>0; print("Archive cycles observed:",len(a))' "$output" ;;
+            esac
+          done
