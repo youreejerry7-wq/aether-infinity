@@ -156,14 +156,86 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
     }
 
 
+
+def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
+    """Calibrate then *measure* independent trials near a common time target.
+
+    Each method gets its own calibrated sample count. The actual wall times
+    are recorded, never forced to equal the requested budget. Calibration
+    overhead is excluded from trial durations and reported separately.
+    """
+    if (isinstance(budget_seconds, bool) or
+            not isinstance(budget_seconds, (int, float)) or
+            not math.isfinite(budget_seconds) or
+            not 0.005 <= budget_seconds <= 0.25):
+        raise ValueError("budget_seconds must be finite and between 0.005 and 0.25")
+    if isinstance(replicates, bool) or not isinstance(replicates, int) or not 2 <= replicates <= 30:
+        raise ValueError("replicates must be an integer between 2 and 30")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("seed must be an integer")
+
+    results = {}
+    calibration_seconds = 0.0
+    # Three methods share the global sampling budget; cap each independently.
+    max_samples = min(100_000, MAX_TOTAL_SAMPLES // (len(METHODS) * replicates))
+    for method_index, (name, method) in enumerate(METHODS.items()):
+        calibration_times = []
+        for i in range(3):
+            start = time.perf_counter()
+            method(1000, random.Random(seed + method_index * 1009 + i))
+            calibration_times.append(time.perf_counter() - start)
+        calibration_seconds += sum(calibration_times)
+        calibration_median = statistics.median(calibration_times)
+        samples = min(max_samples, max(100, round(1000 * budget_seconds / calibration_median)))
+        errors = []
+        durations = []
+        for i in range(replicates):
+            # Distinct seeded trials; never reuse calibration generators.
+            rng = random.Random(seed + 1_000_003 * (i + 1) + 9973 * method_index)
+            start = time.perf_counter()
+            estimate = method(samples, rng)
+            durations.append(time.perf_counter() - start)
+            errors.append(estimate - math.pi)
+        unit_variance = {
+            "circle_hits": 4 * math.pi - math.pi ** 2,
+            "conditional_1d": 32 / 3 - math.pi ** 2,
+            "antithetic_1d": antithetic_unit_variance_midpoint(),
+        }[name]
+        results[name] = {
+            "sampling_units_per_replication": samples,
+            "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
+            "theoretical_standard_error": math.sqrt(unit_variance / samples),
+            "median_observed_seconds": statistics.median(durations),
+            "min_observed_seconds": min(durations),
+            "max_observed_seconds": max(durations),
+            "sample_cap_reached": samples == max_samples,
+        }
+    return {
+        "reference": "pi",
+        "methodology": (
+            "Measured trials with separately calibrated sampling-unit counts near "
+            "a common wall-time target, not identical elapsed time. Calibration "
+            "cost is reported separately and not included in trial durations. "
+            "Method-specific work per unit differs; observed RMSE is seed-specific. "
+            "No quantum, hardware-independent, or universal speed claim."
+        ),
+        "target_seconds_per_replication": budget_seconds,
+        "replications": replicates,
+        "seed": seed,
+        "calibration_seconds_total": calibration_seconds,
+        "results": results,
+    }
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--samples", type=int, default=10_000)
     parser.add_argument("--replicates", type=int, default=24)
     parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--matched-seconds", type=float, default=None, help="Calibrated wall-time target (0.005 to 0.25 seconds) per method and trial")
     args = parser.parse_args()
     try:
-        data = benchmark(args.samples, args.replicates, args.seed)
+        data = (benchmark_matched_time(args.matched_seconds, args.replicates, args.seed)
+                if args.matched_seconds is not None else benchmark(args.samples, args.replicates, args.seed))
     except ValueError as exc:
         parser.error(str(exc))
     print(json.dumps(data, indent=2))
