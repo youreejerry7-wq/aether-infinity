@@ -4,6 +4,7 @@ on:
     paths:
       - 'templates/index.html'
       - 'tests/test_frontend_perf.cjs'
+      - 'tests/test_results_dom.cjs'
       - '.github/workflows/browser-performance.yml'
   workflow_dispatch:
 permissions:
@@ -18,7 +19,9 @@ jobs:
         with:
           node-version: '22'
       - name: Verify cached, visibility-aware polling
-        run: node tests/test_frontend_perf.cjs
+        run: |
+          node tests/test_frontend_perf.cjs
+          node tests/test_results_dom.cjs
   smoke-live:
     # Observes the currently deployed site, not this unmerged PR.
     runs-on: ubuntu-latest
