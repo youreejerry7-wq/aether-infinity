@@ -1,0 +1,61 @@
+"""Non-production benchmark regression tests, standard library only."""
+
+import math
+import random
+import unittest
+from pathlib import Path
+
+from speed_lab import (
+    MAX_TOTAL_SAMPLES,
+    METHODS,
+    antithetic_1d,
+    benchmark,
+    circle_hits,
+    conditional_1d,
+)
+
+
+class SpeedLabTests(unittest.TestCase):
+    def test_methods_have_reasonable_pi_estimates(self):
+        for name, method in METHODS.items():
+            with self.subTest(name=name):
+                self.assertLess(abs(method(20_000, random.Random(88)) - math.pi), 0.10)
+
+    def test_methods_are_reproducible(self):
+        for method in (circle_hits, conditional_1d, antithetic_1d):
+            self.assertEqual(method(1000, random.Random(42)), method(1000, random.Random(42)))
+
+    def test_validation(self):
+        for method in METHODS.values():
+            with self.assertRaises(ValueError):
+                method(0, random.Random(7))
+        for kwargs in (
+            {"samples": 0},
+            {"replicates": 1},
+            {"samples": MAX_TOTAL_SAMPLES, "replicates": 2},
+            {"samples": True},
+            {"seed": 0.3},
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                benchmark(**kwargs)
+
+    def test_benchmark_reports_valid_comparative_metrics(self):
+        result = benchmark(samples=1000, replicates=3, seed=2)
+        self.assertEqual(result["samples_per_replication"], 1000)
+        self.assertEqual(result["replications"], 3)
+        self.assertEqual(set(result["results"]), set(METHODS))
+        for metrics in result["results"].values():
+            self.assertTrue(math.isfinite(metrics["rmse"]))
+            self.assertGreaterEqual(metrics["median_seconds_per_replication"], 0)
+            self.assertGreater(metrics["rmse_improvement_factor_vs_baseline"], 0)
+
+    def test_does_not_write_research_archive(self):
+        # The script is an isolated, pure experiment; no output persisted.
+        before = Path("data/research.json")
+        was_present = before.exists()
+        benchmark(samples=100, replicates=2)
+        self.assertEqual(before.exists(), was_present)
+
+
+if __name__ == "__main__":
+    unittest.main()
