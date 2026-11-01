@@ -40,6 +40,10 @@ let rows = [{
 }];
 let postCalls = 0;
 let postMode = 'ok';
+let resolveAbortedPost;
+const timers = [];
+const fakeSetTimeout = (fn, ms) => { const timer = { fn, ms, active: true }; timers.push(timer); return timer; };
+const fakeClearTimeout = timer => { timer.active = false; };
 let resultsMode = 'ok';
 let resolveDelayedResults;
 const fetch = async (url, options) => {
@@ -52,11 +56,15 @@ const fetch = async (url, options) => {
   assert.equal(url, '/api/run');
   assert.equal(options.method, 'POST');
   postCalls++;
+  if (postMode === 'hang') return new Promise((resolve, reject) => {
+    assert.ok(options.signal, 'POST must be abortable');
+    options.signal.addEventListener('abort', () => reject(new Error('Request timed out')), { once: true });
+  });
   if (postMode === 'http-error') return { ok: false };
   if (postMode === 'malformed') return { ok: true, json: async () => ({ estimate: 'invalid', deviation: 0.1 }) };
   return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159265 }) };
 };
-const context = { document, fetch };
+const context = { document, fetch, AbortController, setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
@@ -131,6 +139,19 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.',
     'Failed POST must produce the same safe error');
   assert.equal(nodes.run.disabled, false, 'Button must recover after HTTP failure');
+
+  // A stalled POST must eventually release the disabled button, without raw error text.
+  postMode = 'hang';
+  const hangingPost = nodes.run.onclick();
+  assert.equal(nodes.run.disabled, true, 'Button stays disabled during pending request');
+  const pendingTimeout = timers.at(-1);
+  assert.ok(pendingTimeout && pendingTimeout.active, 'Pending POST must have a timeout');
+  assert.equal(pendingTimeout.ms, 90000, 'Allow cold-start time, but bound request to 90 seconds');
+  pendingTimeout.fn();
+  await hangingPost;
+  assert.equal(nodes.run.disabled, false, 'Aborted POST must restore button');
+  assert.equal(pendingTimeout.active, false, 'Clear timeout after aborted POST');
+  assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
 
   console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, stale-response race, and safe POST failure handling.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
