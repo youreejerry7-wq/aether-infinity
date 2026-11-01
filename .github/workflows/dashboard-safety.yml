@@ -1,0 +1,24 @@
+name: AETHER dashboard safety (read-only)
+on:
+  # The existing dashboard PR conflicts with main; push CI still tests its branch.
+  push:
+    branches: [jules-12948179582805029839-43dc1e9e]
+  pull_request:
+    paths:
+      - 'templates/index.html'
+      - 'tests/test_dashboard_dom.cjs'
+      - '.github/workflows/dashboard-safety.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify safe DOM and archive refresh behavior
+        run: node tests/test_dashboard_dom.cjs
