@@ -40,10 +40,12 @@ const fakeFetch = async (url, options) => {
   };
 };
 const fakeInterval = (fn, ms) => { intervals.push({ fn, ms }); };
+let clockMs = 0;
+class FakeDate extends Date { static now() { return clockMs; } }
 const settle = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
-  vm.runInNewContext(script, { document, fetch: fakeFetch, setInterval: fakeInterval, Date });
+  vm.runInNewContext(script, { document, fetch: fakeFetch, setInterval: fakeInterval, Date: FakeDate });
   await settle();
 
   assert.equal(requests.length, 1, 'Should load once at startup');
@@ -56,7 +58,12 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.ok(nodes['auto-status'].textContent.includes('Last completed cycle'));
   assert.equal(nodes['auto-results'].entries.length, 1);
 
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 1, 'Do not re-fetch before five minutes elapsed');
+
   document.hidden = true;
+  clockMs += 300000;
   intervals[0].fn();
   await settle();
   assert.equal(requests.length, 1, 'No refresh requests in hidden tabs');
@@ -64,11 +71,23 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   document.hidden = false;
   listeners.visibilitychange();
   await settle();
-  assert.equal(requests.length, 2, 'Resume archive refresh when visible');
+  assert.equal(requests.length, 2, 'Resume refresh after five minutes while hidden');
 
+  listeners.visibilitychange();
+  await settle();
+  assert.equal(requests.length, 2, 'Rapid tab switching must not bypass five-minute throttle');
+
+  clockMs += 300000;
   intervals[0].fn();
   await settle();
   assert.equal(requests.length, 3, 'Continue scheduled refresh while visible');
 
-  console.log('Frontend polling regression checks passed: caching, interval, visibility, and rendering.');
+  clockMs += 300000;
+  const pending = intervals[0].fn();
+  intervals[0].fn();
+  await pending;
+  await settle();
+  assert.equal(requests.length, 4, 'Overlapping refreshes must be suppressed');
+
+  console.log('Frontend polling regression checks passed: caching, five-minute throttle, visibility, overlap, and rendering.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
