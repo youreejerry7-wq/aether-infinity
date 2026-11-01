@@ -24,22 +24,23 @@ jobs:
           node tests/test_results_dom.cjs
   smoke-live:
     # Observes the currently deployed site, not this unmerged PR.
+    # Fail visibly if an external GET fails; do not disguise outages as green smoke checks.
+    # Transient network errors are retried; smoke failure does not prove a PR regression.
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
       - name: Measure public health and homepage responses
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          metrics=$(curl -sS -L --connect-timeout 12 --max-time 100 \
+          metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 \
             -o /tmp/aether-health.json -w '%{http_code} %{time_total} %{size_download}' \
             https://aether-infinity.onrender.com/health)
           read -r code seconds bytes <<< "$metrics"
           echo "GET /health: HTTP=$code total_seconds=$seconds bytes=$bytes"
           test "$code" = 200
           python3 -c 'import json; assert json.load(open("/tmp/aether-health.json"))["status"] == "ok"'
-          metrics=$(curl -sS -L --connect-timeout 12 --max-time 100 \
+          metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 \
             -o /tmp/aether-home.html -w '%{http_code} %{time_total} %{size_download}' \
             https://aether-infinity.onrender.com/)
           read -r code seconds bytes <<< "$metrics"
@@ -50,7 +51,6 @@ jobs:
       - name: Measure follow-up responses and public archive payload
         # Follow-up requests measure a warm-ish path, not a guaranteed warm host.
         # This is observation only: failures are reported in logs, not as PR code failures.
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +61,7 @@ jobs:
               archive) url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json" ;;
             esac
             output="/tmp/aether-followup-${endpoint}"
-            metrics=$(curl -sS -L --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
               -o "$output" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
             read -r code ttfb total bytes <<< "$metrics"
             echo "Follow-up GET $endpoint: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
