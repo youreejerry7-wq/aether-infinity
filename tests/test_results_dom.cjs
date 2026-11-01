@@ -39,6 +39,7 @@ let rows = [{
   created: hostile, trials: 20000, estimate: 3.14, deviation: 0.00159265,
 }];
 let postCalls = 0;
+let postMode = 'ok';
 let resultsMode = 'ok';
 let resolveDelayedResults;
 const fetch = async (url, options) => {
@@ -51,6 +52,8 @@ const fetch = async (url, options) => {
   assert.equal(url, '/api/run');
   assert.equal(options.method, 'POST');
   postCalls++;
+  if (postMode === 'http-error') return { ok: false };
+  if (postMode === 'malformed') return { ok: true, json: async () => ({ estimate: 'invalid', deviation: 0.1 }) };
   return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159265 }) };
 };
 const context = { document, fetch };
@@ -117,5 +120,17 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await olderRequest;
   assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-01T06:00:00',
     'Late stale results must not overwrite the most recent successful response');
-  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, and stale-response race.');
+  // Invalid experiment responses and failed POSTs must not display JS exception text.
+  postMode = 'malformed';
+  await nodes.run.onclick();
+  assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.',
+    'Invalid POST payload must produce a stable, non-technical error');
+  assert.equal(nodes.run.disabled, false, 'Button must recover after invalid POST payload');
+  postMode = 'http-error';
+  await nodes.run.onclick();
+  assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.',
+    'Failed POST must produce the same safe error');
+  assert.equal(nodes.run.disabled, false, 'Button must recover after HTTP failure');
+
+  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, stale-response race, and safe POST failure handling.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
