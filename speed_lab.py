@@ -121,7 +121,23 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
     baseline_rmse = results["circle_hits"]["rmse"]
     baseline_time = results["circle_hits"]["median_seconds_per_replication"]
     baseline_error_time = results["circle_hits"]["observed_rmse_squared_seconds"]
+    baseline_theoretical_error_time = (
+        results["circle_hits"]["theoretical_standard_error"] ** 2 * baseline_time
+    )
     for value in results.values():
+        # Equal-wall-time projection: extrapolate measured per-unit cost linearly.
+        # This is NOT a measured fixed-time experiment; startup/cache effects and
+        # machine contention can invalidate the projection.
+        elapsed = value["median_seconds_per_replication"]
+        value["projected_theoretical_se_at_baseline_time"] = (
+            value["theoretical_standard_error"] * math.sqrt(elapsed / baseline_time)
+            if baseline_time > 0 and elapsed > 0 else None
+        )
+        value["theoretical_error_time_efficiency_vs_baseline"] = (
+            baseline_theoretical_error_time /
+            (value["theoretical_standard_error"] ** 2 * elapsed)
+            if elapsed > 0 else None
+        )
         value["rmse_improvement_factor_vs_baseline"] = baseline_rmse / value["rmse"] if value["rmse"] else None
         value["time_speedup_factor_vs_baseline"] = baseline_time / value["median_seconds_per_replication"] if value["median_seconds_per_replication"] else None
         value["observed_error_time_efficiency_vs_baseline"] = (
@@ -135,7 +151,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "samples_per_replication": samples,
         "replications": replicates,
         "seed": seed,
-        "methodology": "Equal independent sampling units, not equal computation. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Observed RMSE^2 times median wall-time is a seed- and machine-specific diagnostic, not a fixed-accuracy or quantum-speed claim.",
+        "methodology": "Equal independent sampling units, not equal computation. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim.",
         "results": results,
     }
 
