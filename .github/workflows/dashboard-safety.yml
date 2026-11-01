@@ -1,5 +1,8 @@
 name: AETHER dashboard safety (read-only)
 on:
+  # The existing dashboard PR conflicts with main; push CI still tests its branch.
+  push:
+    branches: [jules-12948179582805029839-43dc1e9e]
   pull_request:
     paths:
       - 'templates/index.html'
