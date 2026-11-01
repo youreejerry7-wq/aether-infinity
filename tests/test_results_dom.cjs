@@ -159,20 +159,22 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(pendingTimeout.active, false, 'Clear timeout after aborted POST');
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
 
-  // A POST may succeed but its follow-up results GET may hang. The button must recover.
+  // A successful POST must re-enable the button without waiting for a slow follow-up GET.
   postMode = 'ok';
   resultsMode = 'hang';
   const runWithHangingRefresh = nodes.run.onclick();
-  await settle();
-  assert.equal(nodes.run.disabled, true, 'Button stays disabled while refreshing results');
-  const getTimeout = timers.at(-1);
-  assert.equal(getTimeout.ms, 60000, 'Results GET must have a bounded 60-second timeout');
-  assert.equal(getTimeout.active, true, 'Results GET timeout must be active while stalled');
-  getTimeout.fn();
   await runWithHangingRefresh;
-  assert.equal(nodes.run.disabled, false, 'Button recovers after a stalled follow-up GET');
+  assert.equal(nodes.run.disabled, false, 'Successful experiment must not block button on results GET');
+  assert.ok(nodes.message.textContent.includes('Estimate 3.140000'),
+    'Successful experiment feedback should appear before results GET completes');
+  const getTimeout = timers.at(-1);
+  assert.equal(getTimeout.ms, 60000, 'Results GET must retain its bounded 60-second timeout');
+  assert.equal(getTimeout.active, true, 'Results GET continues independently while stalled');
+  getTimeout.fn();
+  await settle();
   assert.equal(getTimeout.active, false, 'Results GET timeout must be cleared');
+  assert.equal(nodes.run.disabled, false, 'Background refresh failure must not disable the button');
   assert.equal(nodes.results.children[0].children[0].textContent, 'Experiments temporarily unavailable.');
 
-  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, stale-response race, and safe POST failure handling.');
+  console.log('Demo results DOM regression passed: inert text, empty state, run/reload, failed HTTP, malformed payload, invalid row, recovery, stale-response race, nonblocking follow-up refresh, and safe POST failure handling.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
