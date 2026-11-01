@@ -5,6 +5,7 @@ on:
     paths:
       - 'data/research.json'
       - 'tests/test_research_archive.py'
+      - '.github/workflows/research.yml'
       - '.github/workflows/research-archive-check.yml'
   workflow_dispatch:
 
