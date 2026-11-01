@@ -34,7 +34,7 @@ const document = {
     return element(tag);
   },
 };
-const hostile = '<img src=x onerror=alert(1)>';
+const hostile = '<svg onload=1>';
 let rows = [{
   created: hostile, trials: 20000, estimate: 3.14, deviation: 0.00159265,
 }];
