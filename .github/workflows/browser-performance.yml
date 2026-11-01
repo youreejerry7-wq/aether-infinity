@@ -19,3 +19,27 @@ jobs:
           node-version: '22'
       - name: Verify cached, visibility-aware polling
         run: node tests/test_frontend_perf.cjs
+  smoke-live:
+    # Observes the currently deployed site, not this unmerged PR.
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Measure public health and homepage responses
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          metrics=$(curl -sS -L --connect-timeout 12 --max-time 100 \
+            -o /tmp/aether-health.json -w '%{http_code} %{time_total} %{size_download}' \
+            https://aether-infinity.onrender.com/health)
+          read -r code seconds bytes <<< "$metrics"
+          echo "GET /health: HTTP=$code total_seconds=$seconds bytes=$bytes"
+          test "$code" = 200
+          python3 -c 'import json; assert json.load(open("/tmp/aether-health.json"))["status"] == "ok"'
+          metrics=$(curl -sS -L --connect-timeout 12 --max-time 100 \
+            -o /tmp/aether-home.html -w '%{http_code} %{time_total} %{size_download}' \
+            https://aether-infinity.onrender.com/)
+          read -r code seconds bytes <<< "$metrics"
+          echo "GET /: HTTP=$code total_seconds=$seconds bytes=$bytes"
+          test "$code" = 200
+          grep -q 'AETHER' /tmp/aether-home.html
