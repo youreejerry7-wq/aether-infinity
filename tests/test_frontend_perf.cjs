@@ -15,7 +15,12 @@ const listeners = {};
 const intervals = [];
 const nodes = {
   'auto-status': { textContent: '' },
-  'auto-results': { textContent: '', entries: [], appendChild(item) { this.entries.push(item); } },
+  'auto-results': {
+    _text: '', entries: [],
+    get textContent() { return this._text; },
+    set textContent(value) { this._text = value; if (value === '') this.entries = []; },
+    appendChild(item) { this.entries.push(item); },
+  },
 };
 const document = {
   hidden: false,
@@ -29,14 +34,15 @@ const document = {
   },
   addEventListener(event, fn) { listeners[event] = fn; },
 };
+let archiveResponse = [{
+  time: '2026-10-31T00:00:00Z', status: 'completed', errors: [],
+  experiments: [{ name: 'Known baseline', observed: 3.14, expected: 3.14159, z_score: 0.12, flag: false }],
+}];
 const fakeFetch = async (url, options) => {
   requests.push({ url, options });
   return {
     ok: true,
-    json: async () => [{
-      time: '2026-10-31T00:00:00Z',
-      experiments: [{ name: 'Known baseline', observed: 3.14, expected: 3.14159, z_score: 0.12, flag: false }],
-    }],
+    json: async () => archiveResponse,
   };
 };
 const fakeInterval = (fn, ms) => { intervals.push({ fn, ms }); };
@@ -55,7 +61,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(intervals.length, 1);
   assert.equal(intervals[0].ms, 300000, 'Do not fetch more often than every 5 minutes');
   assert.equal(typeof listeners.visibilitychange, 'function');
-  assert.ok(nodes['auto-status'].textContent.includes('Last completed cycle'));
+  assert.ok(nodes['auto-status'].textContent.includes('Status: completed'));
+  assert.ok(nodes['auto-status'].textContent.includes('Latest archived cycle'));
   assert.equal(nodes['auto-results'].entries.length, 1);
 
   intervals[0].fn();
@@ -68,10 +75,21 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
   assert.equal(requests.length, 1, 'No refresh requests in hidden tabs');
 
+  archiveResponse = [{
+    time: '2026-10-31T01:00:00Z', status: 'partial_failure',
+    experiments: [], errors: [{ name: 'Coin sample', error: 'private diagnostic' }],
+  }];
   document.hidden = false;
   listeners.visibilitychange();
   await settle();
   assert.equal(requests.length, 2, 'Resume refresh after five minutes while hidden');
+  assert.ok(nodes['auto-status'].textContent.includes('Status: partial_failure'),
+    'A partially failed cycle must not be labeled completed');
+  assert.ok(nodes['auto-status'].textContent.includes('1 recorded errors'));
+  assert.equal(nodes['auto-results'].entries.length, 1, 'Display error summary without fake experiments');
+  assert.ok(nodes['auto-results'].entries[0].textContent.includes('Coin sample'));
+  assert.ok(!nodes['auto-results'].entries[0].textContent.includes('private diagnostic'),
+    'Do not render arbitrary error details in the page');
 
   listeners.visibilitychange();
   await settle();
@@ -89,5 +107,5 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
   assert.equal(requests.length, 4, 'Overlapping refreshes must be suppressed');
 
-  console.log('Frontend polling regression checks passed: caching, five-minute throttle, visibility, overlap, and rendering.');
+  console.log('Frontend polling regression checks passed: caching, throttling, visibility, overlap, completed/partial-failure status, and safe error summary.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
