@@ -1,0 +1,74 @@
+// Behavioral tests for the inline research archive polling logic.
+// No external network, packages, production writes, or secrets required.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const source = fs.readFileSync(path.join(__dirname, '..', 'templates', 'index.html'), 'utf8');
+const scripts = [...source.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+assert.ok(scripts.length >= 1, 'Research page must have inline scripts');
+const script = scripts[0][1];
+
+const requests = [];
+const listeners = {};
+const intervals = [];
+const nodes = {
+  'auto-status': { textContent: '' },
+  'auto-results': { textContent: '', entries: [], appendChild(item) { this.entries.push(item); } },
+};
+const document = {
+  hidden: false,
+  getElementById(id) {
+    assert.ok(nodes[id], 'Unexpected DOM lookup: ' + id);
+    return nodes[id];
+  },
+  createElement(tag) {
+    assert.equal(tag, 'p');
+    return { textContent: '' };
+  },
+  addEventListener(event, fn) { listeners[event] = fn; },
+};
+const fakeFetch = async (url, options) => {
+  requests.push({ url, options });
+  return {
+    ok: true,
+    json: async () => [{
+      time: '2026-10-31T00:00:00Z',
+      experiments: [{ name: 'Known baseline', observed: 3.14, expected: 3.14159, z_score: 0.12, flag: false }],
+    }],
+  };
+};
+const fakeInterval = (fn, ms) => { intervals.push({ fn, ms }); };
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
+(async () => {
+  vm.runInNewContext(script, { document, fetch: fakeFetch, setInterval: fakeInterval, Date });
+  await settle();
+
+  assert.equal(requests.length, 1, 'Should load once at startup');
+  assert.equal(requests[0].url, 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json',
+    'Archive URL should be stable so browser caches can work');
+  assert.equal(requests[0].options.cache, 'default', 'Do not bypass caching');
+  assert.equal(intervals.length, 1);
+  assert.equal(intervals[0].ms, 300000, 'Do not fetch more often than every 5 minutes');
+  assert.equal(typeof listeners.visibilitychange, 'function');
+  assert.ok(nodes['auto-status'].textContent.includes('Last completed cycle'));
+  assert.equal(nodes['auto-results'].entries.length, 1);
+
+  document.hidden = true;
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 1, 'No refresh requests in hidden tabs');
+
+  document.hidden = false;
+  listeners.visibilitychange();
+  await settle();
+  assert.equal(requests.length, 2, 'Resume archive refresh when visible');
+
+  intervals[0].fn();
+  await settle();
+  assert.equal(requests.length, 3, 'Continue scheduled refresh while visible');
+
+  console.log('Frontend polling regression checks passed: caching, interval, visibility, and rendering.');
+})().catch(error => { console.error(error); process.exitCode = 1; });
