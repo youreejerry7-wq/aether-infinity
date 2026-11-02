@@ -42,6 +42,7 @@ let results = [{
   expected: 3.14159, deviation: 0.00159, status: hostile,
 }];
 let failArchive = false;
+let fallbackArchive = null;
 let resultsMode = 'ok';
 let resolveDelayedResults;
 let runMode = 'ok';
@@ -67,7 +68,7 @@ const fetch = async (url, options) => {
       options.signal.addEventListener('abort', () => reject(new Error('Body timed out')), { once: true });
     }) };
   }
-  if (url === '/api/research') return { ok: !failArchive, json: async () => archive };
+  if (url === '/api/research') return { ok: !failArchive, json: async () => fallbackArchive ?? archive };
   if (url.startsWith('https://raw.githubusercontent.com/'))
     return { ok: !failArchive, json: async () => archive };
   if (url === '/api/results') {
@@ -168,6 +169,27 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.ok(nodes['auto-status'].textContent.includes('first 50 of 120 experiments'));
   assert.ok(nodes['auto-status'].textContent.includes('first 20 of 40 errors'));
   archive = [{ time: '2026-11-02T04:45:00Z', status: 'completed', errors: [], experiments: [] }];
+
+  // A malformed GitHub cycle must never be labeled a verified current run.
+  // A valid server copy is allowed only as an explicitly stale-prone snapshot.
+  archive = [{ time: 'invalid timestamp', status: 'completed', errors: [], experiments: [] }];
+  fallbackArchive = [{ time: '2026-11-02T04:40:00Z', status: 'completed', errors: [], experiments: [] }];
+  clockMs += 300000;
+  await context.loadAuto();
+  assert.ok(nodes['auto-status'].textContent.includes('snapshot'),
+    'Malformed primary data must use a clearly labeled fallback');
+  assert.equal(requests.at(-1).url, '/api/research');
+  fallbackArchive = null;
+  clockMs += 30000;
+  await context.loadAuto();
+  assert.equal(nodes['auto-summary'].style.display, 'none',
+    'Invalid primary and fallback cycles must not appear verified');
+  assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+  archive = [{ time: '2026-11-02T04:45:00Z', status: 'completed', errors: [], experiments: [] }];
+  clockMs += 30000;
+  await context.loadAuto();
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'),
+    'A valid archive should recover after the short retry');
 
   assert.equal(nodes.results.children[0].children[0].textContent, hostile.slice(0, 19), 'Date field stays inert even when truncated');
   assert.equal(nodes.results.children[0].children[5].textContent, hostile);
