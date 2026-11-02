@@ -20,6 +20,18 @@ CUT_GRID = tuple(step / 2 for step in range(1, 19))  # 0.5 to 9.0 cm
 BASELINE_CUT = 2.0
 NEGATIVE_CONTROL_CUT = 9.0
 
+# Checked against the cited public textbook example on 2026-11-02.
+# This establishes that the mathematical model is prior art, not a new invention.
+PRIOR_ART = (
+    {
+        "source": "OpenStax, Calculus Volume 1, section 4.7, Example 4.33 and Checkpoint 4.32",
+        "url": "https://openstax.org/books/calculus-volume-1/pages/4-7-applied-optimization-problems",
+        "checked_utc_date": "2026-11-02",
+        "known_result": "The corner-cut open-top box volume formula and its calculus optimum are textbook examples; the checkpoint explicitly uses a 20 by 30 sheet.",
+        "evidence_level": "established_textbook_model",
+    },
+)
+
 
 def box_volume(width, height, cut):
     """Model volume in cm^3; invalid geometry has zero usable volume."""
@@ -110,7 +122,10 @@ def run(seed=SEED):
         "holdout_sheets_cm": [list(pair) for pair in HOLDOUT_SHEETS],
         "candidate": {**candidate, "evidence_level": "simulation_candidate" if candidate["passed_all_holdouts"] else "rejected_simulation_candidate"},
         "negative_control": {**negative, "evidence_level": "rejected_simulation_candidate" if not negative["passed_all_holdouts"] else "simulation_candidate"},
+        "prior_art_evidence": [dict(item) for item in PRIOR_ART],
+        "model_prior_art_status": "established_textbook_example",
         "novelty_status": "not_assessed",
+        "novelty_scope": "The geometry and optimization are known textbook examples; no patent search or novelty claim for any new implementation.",
         "physical_validation": False,
         "uncertainty": "Only three fixed holdout sheet sizes; no manufacturing tolerances, materials, folds, costs, or independent physical replication modeled.",
         "safety_scope": "Noncritical mathematical geometry demonstration only.",
