@@ -58,3 +58,33 @@ def test_api_research_endpoint(client, tmp_path):
     data = response.get_json()
     assert isinstance(data, list)
     assert len(data) == 1
+
+
+def test_research_archive_does_not_leak_json_parse_details(client, tmp_path, monkeypatch):
+    archive = tmp_path / "private_archive.json"
+    archive.write_text("{invalid archive")
+    monkeypatch.setattr(flask_app, "RESEARCH_JSON_PATH", archive)
+
+    response = client.get("/api/research")
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "Research archive temporarily unavailable."}
+    assert b"Expecting property name" not in response.data
+    assert b"private_archive" not in response.data
+
+
+def test_research_archive_does_not_leak_filesystem_details(client, monkeypatch):
+    class UnreadableArchive:
+        def exists(self):
+            return True
+
+        def read_text(self, encoding):
+            raise OSError("sensitive-internal-directory/secret-archive")
+
+    monkeypatch.setattr(flask_app, "RESEARCH_JSON_PATH", UnreadableArchive())
+
+    response = client.get("/api/research")
+
+    assert response.status_code == 500
+    assert response.get_json() == {"error": "Research archive temporarily unavailable."}
+    assert b"sensitive-internal-directory" not in response.data
