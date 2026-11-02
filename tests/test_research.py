@@ -78,6 +78,36 @@ def test_run_research_cycle_file_persistence(tmp_path):
     assert len(data_updated) == 2
 
 
+@pytest.mark.parametrize("existing", ["{not json", "{}", ""])
+def test_invalid_existing_archive_is_never_overwritten(tmp_path, existing):
+    archive = tmp_path / "research.json"
+    archive.write_text(existing, encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        run_research_cycle(seed=123, out_path=archive)
+
+    assert archive.read_text(encoding="utf-8") == existing
+    assert not list(tmp_path.glob(".research-*.tmp"))
+
+
+def test_failed_atomic_replace_preserves_archive(tmp_path, monkeypatch):
+    import research
+
+    archive = tmp_path / "research.json"
+    original = '[{"time":"old","experiments":[]}]\n'
+    archive.write_text(original, encoding="utf-8")
+
+    def fail_replace(_src, _dest):
+        raise OSError("simulated atomic replace failure")
+
+    monkeypatch.setattr(research.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="simulated atomic replace failure"):
+        run_research_cycle(seed=123, out_path=archive)
+
+    assert archive.read_text(encoding="utf-8") == original
+    assert not list(tmp_path.glob(".research-*.tmp"))
+
+
 def test_synthetic_archive_commits_do_not_trigger_render_deploys():
     """A data-only scheduled cycle is not an application release."""
     from pathlib import Path
