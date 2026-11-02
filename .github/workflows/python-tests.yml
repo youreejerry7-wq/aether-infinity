@@ -25,3 +25,30 @@ jobs:
         run: python -m pip install -r requirements.txt pytest
       - name: Verify Flask routes and seeded statistical baselines (offline)
         run: python -m pytest -q tests/test_app.py tests/test_research.py
+  smoke-live:
+    # Observes the existing production service, NOT unmerged PR code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Measure live AETHER health, homepage, and public archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in health homepage archive; do
+            case "$endpoint" in
+              health) url="https://aether-infinity.onrender.com/health" ;;
+              homepage) url="https://aether-infinity.onrender.com/" ;;
+              archive) url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json" ;;
+            esac
+            output="/tmp/aether-smoke-$endpoint"
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o "$output" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r code ttfb total bytes <<< "$metrics"
+            echo "GET $endpoint: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+            test "$code" = 200
+            case "$endpoint" in
+              health) python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$output" ;;
+              homepage) grep -q 'AETHER' "$output" ;;
+              archive) python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); assert isinstance(data,list) and data; print("Simulated cycles:",len(data))' "$output" ;;
+            esac
+          done
