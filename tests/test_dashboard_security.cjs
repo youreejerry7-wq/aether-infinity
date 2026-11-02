@@ -58,7 +58,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(cells[2].textContent, hostile, 'Observed value must remain inert');
   assert.equal(nodes['auto-errors'].children[0].children[1].children[0].textContent, hostile);
   assert.equal(nodes['auto-interpretation'].textContent, hostile);
-  assert.equal(nodes.results.children[0].children[0].textContent, hostile);
+  assert.equal(nodes.results.children[0].children[0].textContent, hostile.slice(0, 19), 'Date field stays inert even when truncated');
   assert.equal(nodes.results.children[0].children[5].textContent, hostile);
 
   // A missing archive must not leave a stale "completed" dashboard visible.
