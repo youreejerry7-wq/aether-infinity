@@ -52,7 +52,13 @@ def research_data():
 
 @app.get('/health')
 def health():
-    return jsonify(status='ok')
+    # Render supplies the deployed Git SHA. Expose only a validated revision,
+    # never arbitrary environment content or configuration secrets.
+    revision = os.environ.get('RENDER_GIT_COMMIT', '')
+    payload = {'status': 'ok'}
+    if len(revision) == 40 and all(ch in '0123456789abcdefABCDEF' for ch in revision):
+        payload['revision'] = revision.lower()
+    return jsonify(payload)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
