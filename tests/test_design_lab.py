@@ -13,6 +13,10 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(lab.box_volume(20, 30, 10), 0)
         self.assertEqual(lab.box_volume(18, 32, 9), 0)
         self.assertEqual(lab.box_volume(-1, 30, 2), 0)
+        self.assertEqual(lab.box_volume(float("nan"), 30, 2), 0)
+        self.assertEqual(lab.box_volume(20, float("inf"), 2), 0)
+        self.assertEqual(lab.box_volume(20, 30, float("nan")), 0)
+        self.assertEqual(lab.box_volume(20, 30, float("-inf")), 0)
 
     def test_training_seed_reproducible_and_bounded(self):
         a = lab.training_sheets(42)
@@ -36,6 +40,13 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertTrue(report["candidate"]["passed_all_holdouts"])
         self.assertGreater(report["candidate"]["minimum_holdout_improvement_cm3"], 0)
         self.assertEqual(report["candidate"]["evidence_level"], "simulation_candidate")
+        # A failed control must be physically feasible within the model;
+        # invalid zero-volume geometry would be a misleading easy rejection.
+        self.assertEqual(report["negative_control"]["cut_cm"], 7.5)
+        for w, h in lab.HOLDOUT_SHEETS:
+            self.assertGreater(lab.box_volume(w, h, lab.NEGATIVE_CONTROL_CUT), 0)
+            self.assertGreater(lab.box_volume(w, h, lab.BASELINE_CUT), 0)
+        self.assertTrue(all(v > 0 for v in report["negative_control"]["holdout_volumes_cm3"]))
         self.assertFalse(report["negative_control"]["passed_all_holdouts"])
         self.assertLess(report["negative_control"]["minimum_holdout_improvement_cm3"], 0)
         self.assertEqual(report["negative_control"]["evidence_level"], "rejected_simulation_candidate")
