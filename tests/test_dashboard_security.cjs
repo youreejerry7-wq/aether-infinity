@@ -47,6 +47,7 @@ let resolveDelayedResults;
 let runMode = 'ok';
 let hangGitHub = false;
 let hangFallback = false;
+let hangArchiveBody = false;
 const fetch = async (url, options) => {
   requests.push({url, options});
   const shouldHang = (hangGitHub && url.startsWith('https://raw.githubusercontent.com/')) ||
@@ -57,6 +58,12 @@ const fetch = async (url, options) => {
     return new Promise((resolve, reject) => {
       options.signal.addEventListener('abort', () => reject(new Error('Timed out')), { once: true });
     });
+  }
+  if (hangArchiveBody && url.startsWith('https://raw.githubusercontent.com/')) {
+    hangArchiveBody = false;
+    return { ok: true, json: () => new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('Body timed out')), { once: true });
+    }) };
   }
   if (url === '/api/research') return { ok: !failArchive, json: async () => archive };
   if (url.startsWith('https://raw.githubusercontent.com/'))
@@ -182,6 +189,20 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   clockMs += 300000;
   await context.loadAuto();
   assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
+
+  // A response with headers but a stalled JSON body must still time out and recover.
+  hangArchiveBody = true;
+  clockMs += 300000;
+  const stalledBody = context.loadAuto();
+  await settle();
+  const bodyTimeout = timeoutTasks.at(-1);
+  assert.equal(bodyTimeout.ms, 15000);
+  assert.equal(bodyTimeout.active, true, 'Abort timer must remain active during JSON parsing');
+  bodyTimeout.fn();
+  await stalledBody;
+  assert.equal(bodyTimeout.active, false, 'Body timeout must be cleared after fallback');
+  assert.equal(requests.at(-1).url, '/api/research', 'Timed-out JSON body must use server fallback');
+  assert.ok(nodes['auto-status'].textContent.includes('snapshot'));
 
   // Malformed demo rows must show a safe error instead of partial rendering.
   results = [{ created: hostile, trials: 20000, estimate: 'invalid', expected: 3.14, deviation: 0, status: hostile }];
