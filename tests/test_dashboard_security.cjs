@@ -135,6 +135,26 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await context.loadAuto();
   assert.equal(nodes['auto-interpretation'].textContent, '', 'Missing interpretation clears stale text');
   assert.equal(nodes['auto-errors'].children.length, 0, 'Resolved errors are not retained');
+
+  // Oversized archives must not create unbounded DOM rows or hide truncation.
+  archive = [{
+    time: '2026-11-02T04:30:00Z', status: 'partial_failure',
+    errors: Array.from({ length: 40 }, (_, i) => ({ name: 'Error ' + i })),
+    experiments: Array.from({ length: 120 }, (_, i) => ({
+      name: 'Experiment ' + i, category: 'known_baseline', observed: i,
+      expected: i, z_score: 0, trials: 100, flag: false,
+    })),
+  }];
+  clockMs += 300000;
+  await context.loadAuto();
+  assert.equal(nodes['auto-experiments'].children.length, 50,
+    'Only the first 50 archive experiments may be rendered');
+  assert.equal(nodes['auto-errors'].children[0].children[1].children.length, 20,
+    'Only the first 20 archive error names may be rendered');
+  assert.ok(nodes['auto-status'].textContent.includes('first 50 of 120 experiments'));
+  assert.ok(nodes['auto-status'].textContent.includes('first 20 of 40 errors'));
+  archive = [{ time: '2026-11-02T04:45:00Z', status: 'completed', errors: [], experiments: [] }];
+
   assert.equal(nodes.results.children[0].children[0].textContent, hostile.slice(0, 19), 'Date field stays inert even when truncated');
   assert.equal(nodes.results.children[0].children[5].textContent, hostile);
 
