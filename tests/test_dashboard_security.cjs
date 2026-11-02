@@ -42,6 +42,9 @@ let results = [{
   expected: 3.14159, deviation: 0.00159, status: hostile,
 }];
 let failArchive = false;
+let resultsMode = 'ok';
+let resolveDelayedResults;
+let runMode = 'ok';
 let hangGitHub = false;
 let hangFallback = false;
 const fetch = async (url, options) => {
@@ -58,8 +61,22 @@ const fetch = async (url, options) => {
   if (url === '/api/research') return { ok: !failArchive, json: async () => archive };
   if (url.startsWith('https://raw.githubusercontent.com/'))
     return { ok: !failArchive, json: async () => archive };
-  if (url === '/api/results') return { ok: true, json: async () => results };
-  if (url === '/api/run') return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159 }) };
+  if (url === '/api/results') {
+    if (resultsMode === 'delayed') return new Promise(resolve => { resolveDelayedResults = resolve; });
+    if (resultsMode === 'hang') return new Promise((resolve, reject) => {
+      assert.ok(options.signal, 'Results GET must be abortable');
+      options.signal.addEventListener('abort', () => reject(new Error('GET timed out')), { once: true });
+    });
+    return { ok: true, json: async () => results };
+  }
+  if (url === '/api/run') {
+    if (runMode === 'hang') return new Promise((resolve, reject) => {
+      assert.ok(options.signal, 'Experiment POST must be abortable');
+      options.signal.addEventListener('abort', () => reject(new Error('POST timed out')), { once: true });
+    });
+    if (runMode === 'malformed') return { ok: true, json: async () => ({ estimate: 'invalid', deviation: 0 }) };
+    return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159 }) };
+  }
   throw Error('Unexpected fetch ' + url);
 };
 const timeoutTasks = [];
@@ -165,5 +182,65 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await context.loadInteractive();
   assert.equal(nodes.results.children[0].children[0].textContent, 'Interactive results temporarily unavailable.');
 
-  console.log('Dashboard DOM security PASS: hostile archive/API text inert, no HTML interpolation, safe failure reset.');
+  // An older, slow results response must never overwrite a newer successful refresh.
+  resultsMode = 'delayed';
+  const olderResults = context.loadInteractive();
+  assert.equal(typeof resolveDelayedResults, 'function');
+  resultsMode = 'ok';
+  results = [{ created: '2026-11-02T03:00:00Z', trials: 20000, estimate: 3.14,
+    expected: 3.14159, deviation: 0.00159, status: 'completed' }];
+  await context.loadInteractive();
+  assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-02 03:00:00');
+  resolveDelayedResults({ ok: true, json: async () => [{
+    created: '2026-11-02T01:00:00Z', trials: 20000, estimate: 3.14,
+    expected: 3.14159, deviation: 0.00159, status: 'completed',
+  }] });
+  await olderResults;
+  assert.equal(nodes.results.children[0].children[0].textContent, '2026-11-02 03:00:00',
+    'Stale GET must not overwrite newer results');
+
+  // GET timeout is bounded and releases its timer without displaying stale data.
+  resultsMode = 'hang';
+  const hangingGet = context.loadInteractive();
+  await settle();
+  const getTimeout = timeoutTasks.at(-1);
+  assert.equal(getTimeout.ms, 60000);
+  getTimeout.fn();
+  await hangingGet;
+  assert.equal(getTimeout.active, false);
+  assert.equal(nodes.results.children[0].children[0].textContent,
+    'Interactive results temporarily unavailable.');
+
+  // Successful POST feedback and button recovery must not wait on a stalled GET.
+  const runWithHangingGet = nodes.run.onclick();
+  await runWithHangingGet;
+  assert.equal(nodes.run.disabled, false);
+  assert.ok(nodes.message.textContent.includes('Estimate: 3.140000'));
+  const refreshTimeout = timeoutTasks.at(-1);
+  assert.equal(refreshTimeout.ms, 60000);
+  assert.equal(refreshTimeout.active, true);
+  refreshTimeout.fn();
+  await settle();
+  assert.equal(refreshTimeout.active, false);
+
+  // Invalid POST response is safe and does not strand the button.
+  resultsMode = 'ok';
+  runMode = 'malformed';
+  await nodes.run.onclick();
+  assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
+  assert.equal(nodes.run.disabled, false);
+
+  // A stalled POST must abort after 90 seconds and recover without exposing diagnostics.
+  runMode = 'hang';
+  const hangingPost = nodes.run.onclick();
+  assert.equal(nodes.run.disabled, true);
+  const postTimeout = timeoutTasks.at(-1);
+  assert.equal(postTimeout.ms, 90000);
+  postTimeout.fn();
+  await hangingPost;
+  assert.equal(postTimeout.active, false);
+  assert.equal(nodes.run.disabled, false);
+  assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
+
+  console.log('Dashboard DOM security PASS: inert text, bounded requests, stale-response guard, nonblocking run feedback.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
