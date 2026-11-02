@@ -109,7 +109,14 @@
 </main>
 
 <script>
+const archiveRefreshMs = 300000;
+let lastArchiveRequestAt = -Infinity;
+let archiveUpdating = false;
 async function loadAuto() {
+  if (document.hidden || archiveUpdating || Date.now() - lastArchiveRequestAt < archiveRefreshMs) return;
+  archiveUpdating = true;
+  lastArchiveRequestAt = Date.now();
+  try {
   const autoStatus = document.getElementById('auto-status');
   const autoSummary = document.getElementById('auto-summary');
   const autoTable = document.getElementById('auto-table');
@@ -120,25 +127,23 @@ async function loadAuto() {
   let data = null;
   let errorSource = null;
 
-  // Try local API endpoint first, fallback to raw GitHub
+  // Prefer the up-to-date GitHub archive; the deployed Flask copy may lag behind main.
+  let fromGitHub = false;
   try {
-    const r = await fetch('/api/research');
+    const r = await fetch('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
     if (r.ok) {
       data = await r.json();
+      fromGitHub = Array.isArray(data) && data.length > 0;
     }
-  } catch (e) {
-    // Ignore, fallback to github raw
+  } catch (_) {
+    // The deployed server snapshot is a read-only fallback.
   }
 
-  if (!data || !data.length) {
+  if (!fromGitHub) {
     try {
-      const r = await fetch('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json?t=' + Date.now(), { cache: 'no-store' });
-      if (r.ok) {
-        data = await r.json();
-      } else {
-        errorSource = 'Research archive temporarily unavailable.';
-      }
-    } catch (e) {
+      const r = await fetch('/api/research');
+      if (r.ok) data = await r.json();
+    } catch (_) {
       errorSource = 'Research archive temporarily unavailable.';
     }
   }
@@ -154,7 +159,8 @@ async function loadAuto() {
     return;
   }
 
-  autoStatus.style.display = 'none';
+  autoStatus.style.display = '';
+  autoStatus.textContent = fromGitHub ? 'Latest available GitHub archive.' : 'Showing deployed server archive snapshot (may be stale).';
   autoSummary.style.display = 'grid';
   autoTable.style.display = 'table';
 
@@ -213,6 +219,9 @@ async function loadAuto() {
       }
       autoExperiments.appendChild(row);
     }
+  }
+  } finally {
+    archiveUpdating = false;
   }
 }
 
@@ -280,7 +289,8 @@ document.getElementById('run').onclick = async () => {
 
 loadAuto();
 loadInteractive();
-setInterval(loadAuto, 60000);
+setInterval(loadAuto, archiveRefreshMs);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAuto(); });
 </script>
 </body>
 </html>

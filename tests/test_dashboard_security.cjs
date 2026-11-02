@@ -17,7 +17,14 @@ const ids = ['auto-status','auto-summary','auto-table','auto-experiments',
   'auto-errors','auto-interpretation','val-last-run','val-status',
   'val-cycles','val-threshold','results','run','message'];
 const nodes = Object.fromEntries(ids.map(id => [id, new Element()]));
+const listeners = {};
+const intervals = [];
+const requests = [];
+let clockMs = 0;
+class FakeDate extends Date { static now() { return clockMs; } }
 const document = {
+  hidden: false,
+  addEventListener(event, fn) { listeners[event] = fn; },
   getElementById(id) { assert.ok(nodes[id], 'Unexpected DOM lookup: ' + id); return nodes[id]; },
   createElement(tag) { return new Element(tag); },
 };
@@ -36,6 +43,7 @@ let results = [{
 }];
 let failArchive = false;
 const fetch = async (url, options) => {
+  requests.push({url, options});
   if (url === '/api/research') return { ok: !failArchive, json: async () => archive };
   if (url.startsWith('https://raw.githubusercontent.com/'))
     return { ok: !failArchive, json: async () => archive };
@@ -43,11 +51,28 @@ const fetch = async (url, options) => {
   if (url === '/api/run') return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159 }) };
   throw Error('Unexpected fetch ' + url);
 };
-const context = { document, fetch, setInterval: () => {} };
+const context = { document, fetch, Date: FakeDate, setInterval: (fn, ms) => intervals.push({fn, ms}) };
 const settle = () => new Promise(resolve => setImmediate(resolve));
 (async () => {
   vm.runInNewContext(match[1], context);
   await settle();
+  const archiveRequests = () => requests.filter(x => x.url.startsWith('https://raw.githubusercontent.com/'));
+  assert.equal(archiveRequests().length, 1, 'Load GitHub archive first, not stale deployed copy');
+  assert.equal(archiveRequests()[0].url, 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json');
+  assert.equal(archiveRequests()[0].options.cache, 'default', 'Allow browser caching');
+  assert.equal(intervals.length, 1);
+  assert.equal(intervals[0].ms, 300000, 'Refresh at most every five minutes');
+  assert.equal(typeof listeners.visibilitychange, 'function');
+  await context.loadAuto();
+  assert.equal(archiveRequests().length, 1, 'Repeated visible refresh is throttled');
+  document.hidden = true;
+  clockMs += 300000;
+  await context.loadAuto();
+  assert.equal(archiveRequests().length, 1, 'Hidden tabs must not poll');
+  document.hidden = false;
+  listeners.visibilitychange();
+  await settle();
+  assert.equal(archiveRequests().length, 2, 'Resume when tab is visible after interval');
   const status = nodes['val-status'].children[0];
   assert.equal(status.textContent, hostile, 'Untrusted status must remain inert text');
   assert.equal(nodes['auto-experiments'].children.length, 1);
@@ -63,6 +88,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 
   // A missing archive must not leave a stale "completed" dashboard visible.
   failArchive = true;
+  clockMs += 300000;
   await context.loadAuto();
   assert.equal(nodes['auto-summary'].style.display, 'none');
   assert.equal(nodes['auto-experiments'].children.length, 0);
