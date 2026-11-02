@@ -127,6 +127,14 @@ async function fetchArchiveJsonWithTimeout(url, options = {}) {
     clearTimeout(timeout);
   }
 }
+// Reject structurally invalid or undated cycles instead of presenting them as verified.
+function isUsableArchive(data) {
+  const latest = Array.isArray(data) ? data[0] : null;
+  return Boolean(latest && typeof latest === 'object' && !Array.isArray(latest) &&
+    typeof latest.time === 'string' && !Number.isNaN(Date.parse(latest.time)) &&
+    typeof latest.status === 'string' && Array.isArray(latest.experiments) &&
+    Array.isArray(latest.errors));
+}
 let nextArchiveRequestAt = -Infinity;
 let archiveUpdating = false;
 async function loadAuto() {
@@ -148,7 +156,7 @@ async function loadAuto() {
   let fromGitHub = false;
   try {
     data = await fetchArchiveJsonWithTimeout('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
-    fromGitHub = Array.isArray(data) && data.length > 0;
+    fromGitHub = isUsableArchive(data);
   } catch (_) {
     // The deployed server snapshot is a read-only fallback.
   }
@@ -156,8 +164,11 @@ async function loadAuto() {
   if (!fromGitHub) {
     try {
       const fallbackData = await fetchArchiveJsonWithTimeout('/api/research');
-      if (fallbackData !== null) data = fallbackData;
-      else errorSource = 'Research archive temporarily unavailable.';
+      if (isUsableArchive(fallbackData)) data = fallbackData;
+      else {
+        data = null;
+        errorSource = 'Research archive temporarily unavailable.';
+      }
     } catch (_) {
       errorSource = 'Research archive temporarily unavailable.';
     }
