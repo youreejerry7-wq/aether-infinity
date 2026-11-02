@@ -122,6 +122,12 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(cells[2].textContent, hostile, 'Observed value must remain inert');
   assert.equal(nodes['auto-errors'].children[0].children[1].children[0].textContent, hostile);
   assert.equal(nodes['auto-interpretation'].textContent, hostile);
+  // A later valid cycle without interpretation must not retain an earlier cycle's text.
+  archive = [{time: '2026-11-02T04:00:00Z', status: 'completed', errors: [], experiments: []}];
+  clockMs += 300000;
+  await context.loadAuto();
+  assert.equal(nodes['auto-interpretation'].textContent, '', 'Missing interpretation clears stale text');
+  assert.equal(nodes['auto-errors'].children.length, 0, 'Resolved errors are not retained');
   assert.equal(nodes.results.children[0].children[0].textContent, hostile.slice(0, 19), 'Date field stays inert even when truncated');
   assert.equal(nodes.results.children[0].children[5].textContent, hostile);
 
