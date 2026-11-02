@@ -110,6 +110,16 @@
 
 <script>
 const archiveRefreshMs = 300000;
+const archiveTimeoutMs = 15000;
+async function fetchArchiveWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), archiveTimeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 let lastArchiveRequestAt = -Infinity;
 let archiveUpdating = false;
 async function loadAuto() {
@@ -130,7 +140,7 @@ async function loadAuto() {
   // Prefer the up-to-date GitHub archive; the deployed Flask copy may lag behind main.
   let fromGitHub = false;
   try {
-    const r = await fetch('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
+    const r = await fetchArchiveWithTimeout('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
     if (r.ok) {
       data = await r.json();
       fromGitHub = Array.isArray(data) && data.length > 0;
@@ -141,7 +151,7 @@ async function loadAuto() {
 
   if (!fromGitHub) {
     try {
-      const r = await fetch('/api/research');
+      const r = await fetchArchiveWithTimeout('/api/research');
       if (r.ok) data = await r.json();
       else errorSource = 'Research archive temporarily unavailable.';
     } catch (_) {
