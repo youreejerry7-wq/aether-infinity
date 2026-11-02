@@ -245,16 +245,25 @@ async function loadAuto() {
   }
 }
 
+// Keep response-body parsing within the timeout as well as response headers.
+async function fetchInteractiveJsonWithTimeout(url, options = {}, timeoutMs = 60000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) throw Error('Request unavailable');
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 let interactiveRequestSeq = 0;
 async function loadInteractive() {
   const requestSeq = ++interactiveRequestSeq;
   const tbody = document.getElementById('results');
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
   try {
-    const r = await fetch('/api/results', { signal: controller.signal });
-    if (!r.ok) throw Error('Results unavailable');
-    const data = await r.json();
+    const data = await fetchInteractiveJsonWithTimeout('/api/results');
     if (requestSeq !== interactiveRequestSeq) return;
     if (!Array.isArray(data) || !data.every(x =>
       x && typeof x.created === 'string' && Number.isFinite(x.trials) &&
@@ -292,8 +301,6 @@ async function loadInteractive() {
     cell.textContent = 'Interactive results temporarily unavailable.';
     row.appendChild(cell);
     tbody.appendChild(row);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -302,19 +309,14 @@ document.getElementById('run').onclick = async () => {
   const msg = document.getElementById('message');
   btn.disabled = true;
   msg.textContent = 'Running sample…';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90000);
   try {
-    const r = await fetch('/api/run', { method: 'POST', signal: controller.signal });
-    if (!r.ok) throw Error('Run failed');
-    const d = await r.json();
+    const d = await fetchInteractiveJsonWithTimeout('/api/run', { method: 'POST' }, 90000);
     if (!d || !Number.isFinite(d.estimate) || !Number.isFinite(d.deviation)) throw Error('Invalid response');
     msg.textContent = `Estimate: ${d.estimate.toFixed(6)} · Dev: ${d.deviation.toFixed(6)}`;
     void loadInteractive(); // Results refresh is bounded independently; do not block the button.
   } catch (_) {
     msg.textContent = 'Experiment unavailable. Please try again.';
   } finally {
-    clearTimeout(timeout);
     btn.disabled = false;
   }
 };
