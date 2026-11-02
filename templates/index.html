@@ -266,7 +266,12 @@ async function fetchInteractiveJsonWithTimeout(url, options = {}, timeoutMs = 60
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
-    if (!response.ok) throw Error('Request unavailable');
+    if (!response.ok) {
+      // PR #10 proposes a server-side compute cap; explain HTTP 429 without
+      // exposing response bodies or encouraging immediate repeat requests.
+      if (response.status === 429) throw Error('Demo rate limited');
+      throw Error('Request unavailable');
+    }
     return await response.json();
   } finally {
     clearTimeout(timeout);
@@ -329,8 +334,10 @@ document.getElementById('run').onclick = async () => {
     if (!d || !Number.isFinite(d.estimate) || !Number.isFinite(d.deviation)) throw Error('Invalid response');
     msg.textContent = `Estimate: ${d.estimate.toFixed(6)} · Dev: ${d.deviation.toFixed(6)}`;
     void loadInteractive(); // Results refresh is bounded independently; do not block the button.
-  } catch (_) {
-    msg.textContent = 'Experiment unavailable. Please try again.';
+  } catch (error) {
+    msg.textContent = error && error.message === 'Demo rate limited'
+      ? 'Demo temporarily busy. Please retry later.'
+      : 'Experiment unavailable. Please try again.';
   } finally {
     btn.disabled = false;
   }
