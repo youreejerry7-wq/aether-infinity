@@ -136,7 +136,7 @@ async function loadAuto() {
       if (r.ok) {
         data = await r.json();
       } else {
-        errorSource = 'No completed scheduled cycles available yet.';
+        errorSource = 'Research archive temporarily unavailable.';
       }
     } catch (e) {
       errorSource = 'Research archive temporarily unavailable.';
