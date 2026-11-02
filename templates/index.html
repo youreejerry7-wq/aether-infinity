@@ -236,12 +236,17 @@ async function loadAuto() {
   }
 }
 
+let interactiveRequestSeq = 0;
 async function loadInteractive() {
+  const requestSeq = ++interactiveRequestSeq;
   const tbody = document.getElementById('results');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
   try {
-    const r = await fetch('/api/results');
+    const r = await fetch('/api/results', { signal: controller.signal });
     if (!r.ok) throw Error('Results unavailable');
     const data = await r.json();
+    if (requestSeq !== interactiveRequestSeq) return;
     if (!Array.isArray(data) || !data.every(x =>
       x && typeof x.created === 'string' && Number.isFinite(x.trials) &&
       Number.isFinite(x.estimate) && Number.isFinite(x.expected) &&
@@ -270,6 +275,7 @@ async function loadInteractive() {
       tbody.appendChild(row);
     }
   } catch (_) {
+    if (requestSeq !== interactiveRequestSeq) return;
     tbody.textContent = '';
     const row = document.createElement('tr');
     const cell = document.createElement('td');
@@ -277,6 +283,8 @@ async function loadInteractive() {
     cell.textContent = 'Interactive results temporarily unavailable.';
     row.appendChild(cell);
     tbody.appendChild(row);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -285,15 +293,19 @@ document.getElementById('run').onclick = async () => {
   const msg = document.getElementById('message');
   btn.disabled = true;
   msg.textContent = 'Running sample…';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
   try {
-    const r = await fetch('/api/run', { method: 'POST' });
+    const r = await fetch('/api/run', { method: 'POST', signal: controller.signal });
     if (!r.ok) throw Error('Run failed');
     const d = await r.json();
+    if (!d || !Number.isFinite(d.estimate) || !Number.isFinite(d.deviation)) throw Error('Invalid response');
     msg.textContent = `Estimate: ${d.estimate.toFixed(6)} · Dev: ${d.deviation.toFixed(6)}`;
-    await loadInteractive();
-  } catch (e) {
-    msg.textContent = 'Error: ' + e.message;
+    void loadInteractive(); // Results refresh is bounded independently; do not block the button.
+  } catch (_) {
+    msg.textContent = 'Experiment unavailable. Please try again.';
   } finally {
+    clearTimeout(timeout);
     btn.disabled = false;
   }
 };
