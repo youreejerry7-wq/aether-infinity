@@ -136,20 +136,14 @@ async function loadAuto() {
       if (r.ok) {
         data = await r.json();
       } else {
-        errorSource = 'Research archive temporarily unavailable.';
+        errorSource = 'No completed scheduled cycles available yet.';
       }
     } catch (e) {
-      errorSource = 'Research archive temporarily unavailable.';
+      errorSource = 'Failed to load scheduled research data: ' + e.message;
     }
   }
 
-  if (!Array.isArray(data) || !data.length || !data[0] || typeof data[0] !== 'object') {
-    autoSummary.style.display = 'none';
-    autoTable.style.display = 'none';
-    autoExperiments.textContent = '';
-    autoErrors.textContent = '';
-    autoInterpretation.textContent = '';
-    autoStatus.style.display = '';
+  if (!data || !data.length) {
     autoStatus.textContent = errorSource || 'No scheduled research cycles found.';
     return;
   }
@@ -161,12 +155,7 @@ async function loadAuto() {
   const latest = data[0];
   const lastTime = new Date(latest.time).toLocaleString();
   document.getElementById('val-last-run').textContent = lastTime;
-  const statusNode = document.getElementById('val-status');
-  statusNode.textContent = '';
-  const badge = document.createElement('span');
-  badge.className = 'status-badge ' + (latest.status === 'completed' ? 'status-completed' : 'status-failed');
-  badge.textContent = String(latest.status || 'unknown');
-  statusNode.appendChild(badge);
+  document.getElementById('val-status').innerHTML = `<span class="status-badge ${latest.status === 'completed' ? 'status-completed' : 'status-failed'}">${latest.status || 'completed'}</span>`;
   document.getElementById('val-cycles').textContent = data.length;
   document.getElementById('val-threshold').textContent = '|z| > ' + (latest.z_threshold || 3.29);
 
@@ -174,89 +163,60 @@ async function loadAuto() {
     autoInterpretation.textContent = latest.interpretation;
   }
 
-  // Render only error names as inert text; never display raw diagnostics.
-  autoErrors.textContent = '';
-  if (Array.isArray(latest.errors) && latest.errors.length > 0) {
-    const box = document.createElement('div');
-    box.className = 'error-box';
-    const heading = document.createElement('strong');
-    heading.textContent = 'Recorded cycle errors:';
-    box.appendChild(heading);
-    const list = document.createElement('ul');
-    for (const err of latest.errors) {
-      const item = document.createElement('li');
-      item.textContent = String(err && err.name || 'Unnamed experiment');
-      list.appendChild(item);
-    }
-    box.appendChild(list);
-    autoErrors.appendChild(box);
+  // Display errors if present
+  autoErrors.innerHTML = '';
+  if (latest.errors && latest.errors.length > 0) {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'error-box';
+    errDiv.innerHTML = '<strong>Recorded cycle errors:</strong><ul>' +
+      latest.errors.map(err => `<li>${err.name}: ${err.error}</li>`).join('') + '</ul>';
+    autoErrors.appendChild(errDiv);
   }
 
-  // API/archive values are untrusted. Use textContent, never HTML interpolation.
-  autoExperiments.textContent = '';
-  if (Array.isArray(latest.experiments)) {
-    for (const exp of latest.experiments) {
-      const row = document.createElement('tr');
-      const values = [
-        String(exp && exp.name || 'Unnamed experiment'),
-        exp && exp.category === 'known_baseline' ? 'Known baseline' : 'Unverified candidate',
-        String(exp && exp.observed != null ? exp.observed : ''),
-        String(exp && exp.expected != null ? exp.expected : ''),
-        String(exp && exp.z_score != null ? exp.z_score : ''),
-        String(exp && exp.trials != null ? exp.trials : ''),
-        exp && exp.flag ? 'Review flag (not a discovery)' : 'No flag'
-      ];
-      for (const value of values) {
-        const cell = document.createElement('td');
-        cell.textContent = value;
-        row.appendChild(cell);
-      }
-      autoExperiments.appendChild(row);
-    }
+  // Populate experiment rows
+  autoExperiments.innerHTML = '';
+  if (latest.experiments && latest.experiments.length > 0) {
+    latest.experiments.forEach(exp => {
+      const tr = document.createElement('tr');
+      const categoryBadge = exp.category === 'discovery' ?
+        '<span class="badge-discovery">Discovery</span>' :
+        '<span class="badge-baseline">Known Baseline</span>';
+
+      const flagBadge = exp.flag ?
+        '<span class="flag-review">Flag (|z| &gt; 3.29)</span>' :
+        '<span style="color:#64748b">Normal (|z| &le; 3.29)</span>';
+
+      tr.innerHTML = `
+        <td><strong>${exp.name}</strong><br><small style="margin:0;color:#64748b">${exp.description || ''}</small></td>
+        <td>${categoryBadge}</td>
+        <td>${exp.observed}</td>
+        <td>${exp.expected}</td>
+        <td>${exp.z_score}</td>
+        <td>${exp.trials.toLocaleString()}</td>
+        <td>${flagBadge}</td>
+      `;
+      autoExperiments.appendChild(tr);
+    });
   }
 }
 
 async function loadInteractive() {
-  const tbody = document.getElementById('results');
   try {
     const r = await fetch('/api/results');
-    if (!r.ok) throw Error('Results unavailable');
     const data = await r.json();
-    if (!Array.isArray(data) || !data.every(x =>
-      x && typeof x.created === 'string' && Number.isFinite(x.trials) &&
-      Number.isFinite(x.estimate) && Number.isFinite(x.expected) &&
-      Number.isFinite(x.deviation))) throw Error('Invalid results');
-    tbody.textContent = '';
-    if (!data.length) {
-      const row = document.createElement('tr');
-      const cell = document.createElement('td');
-      cell.colSpan = 6;
-      cell.textContent = 'No interactive experiments run yet.';
-      row.appendChild(cell);
-      tbody.appendChild(row);
-    }
-    for (const x of data) {
-      const row = document.createElement('tr');
-      const values = [
-        x.created.slice(0, 19).replace('T', ' '),
-        String(x.trials), x.estimate.toFixed(6), x.expected.toFixed(6),
-        x.deviation.toFixed(6), String(x.status || 'unknown')
-      ];
-      for (const value of values) {
-        const cell = document.createElement('td');
-        cell.textContent = value;
-        row.appendChild(cell);
-      }
-      tbody.appendChild(row);
-    }
-  } catch (_) {
-    tbody.textContent = '';
-    const row = document.createElement('tr');
-    const cell = document.createElement('td');
-    cell.colSpan = 6;
-    cell.textContent = 'Interactive results temporarily unavailable.';
-    row.appendChild(cell);
-    tbody.appendChild(row);
+    const tbody = document.getElementById('results');
+    tbody.innerHTML = data.map(x => `
+      <tr>
+        <td>${x.created.slice(0,19).replace('T', ' ')}</td>
+        <td>${x.trials.toLocaleString()}</td>
+        <td>${x.estimate.toFixed(6)}</td>
+        <td>${x.expected.toFixed(6)}</td>
+        <td>${x.deviation.toFixed(6)}</td>
+        <td><span class="status-badge status-completed">${x.status}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6">No interactive experiments run yet.</td></tr>';
+  } catch (e) {
+    console.error('Error loading interactive results:', e);
   }
 }
 
