@@ -110,6 +110,7 @@
 
 <script>
 const archiveRefreshMs = 300000;
+const archiveRetryMs = 30000; // Retry failed or stale-fallback loads sooner, without retry storms.
 const archiveTimeoutMs = 15000;
 // Bound DOM work even if a malformed or oversized archive contains many records.
 const maxDisplayedArchiveErrors = 20;
@@ -126,12 +127,12 @@ async function fetchArchiveJsonWithTimeout(url, options = {}) {
     clearTimeout(timeout);
   }
 }
-let lastArchiveRequestAt = -Infinity;
+let nextArchiveRequestAt = -Infinity;
 let archiveUpdating = false;
 async function loadAuto() {
-  if (document.hidden || archiveUpdating || Date.now() - lastArchiveRequestAt < archiveRefreshMs) return;
+  if (document.hidden || archiveUpdating || Date.now() < nextArchiveRequestAt) return;
   archiveUpdating = true;
-  lastArchiveRequestAt = Date.now();
+  nextArchiveRequestAt = Date.now() + archiveRefreshMs;
   try {
   const autoStatus = document.getElementById('auto-status');
   const autoSummary = document.getElementById('auto-summary');
@@ -170,11 +171,14 @@ async function loadAuto() {
     autoInterpretation.textContent = '';
     autoStatus.style.display = '';
     autoStatus.textContent = errorSource || 'No scheduled research cycles found.';
+    nextArchiveRequestAt = Date.now() + archiveRetryMs;
     return;
   }
 
   autoStatus.style.display = '';
   autoStatus.textContent = fromGitHub ? 'Latest available GitHub archive.' : 'Showing deployed server archive snapshot (may be stale).';
+  // A server snapshot is useful but may be old: retry the primary source after 30s.
+  if (!fromGitHub) nextArchiveRequestAt = Date.now() + archiveRetryMs;
   autoSummary.style.display = 'grid';
   autoTable.style.display = 'table';
 
@@ -323,7 +327,7 @@ document.getElementById('run').onclick = async () => {
 
 loadAuto();
 loadInteractive();
-setInterval(loadAuto, archiveRefreshMs);
+setInterval(loadAuto, archiveRetryMs);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAuto(); });
 </script>
 </body>
