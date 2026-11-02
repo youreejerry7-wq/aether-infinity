@@ -76,3 +76,12 @@ def test_run_research_cycle_file_persistence(tmp_path):
     run_research_cycle(seed=1000, out_path=out_file)
     data_updated = json.loads(out_file.read_text())
     assert len(data_updated) == 2
+
+
+def test_synthetic_archive_commits_do_not_trigger_render_deploys():
+    """A data-only scheduled cycle is not an application release."""
+    from pathlib import Path
+
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/research.yml").read_text()
+    assert "git add data/research.json" in workflow
+    assert 'git commit -m "Record scheduled research cycle [skip render]"' in workflow
