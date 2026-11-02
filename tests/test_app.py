@@ -15,11 +15,32 @@ def client(tmp_path):
         yield client
 
 
-def test_health_endpoint(client):
+def test_health_endpoint(client, monkeypatch):
+    monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)
     response = client.get("/health")
     assert response.status_code == 200
     data = response.get_json()
     assert data == {"status": "ok"}
+
+
+def test_health_exposes_only_valid_deployed_revision(client, monkeypatch):
+    expected = "aB" * 20
+    monkeypatch.setenv("RENDER_GIT_COMMIT", expected)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok", "revision": expected.lower()}
+
+
+@pytest.mark.parametrize("invalid", [
+    "", "not-a-git-sha", "a" * 39, "a" * 41,
+    "z" * 40, "a" * 39 + "\\n", "SECRET=value",
+])
+def test_health_never_reflects_unvalidated_revision(client, monkeypatch, invalid):
+    monkeypatch.setenv("RENDER_GIT_COMMIT", invalid)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok"}
+    assert invalid.encode() not in response.data if invalid else True
 
 
 def test_home_page(client):
