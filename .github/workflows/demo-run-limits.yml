@@ -1,0 +1,42 @@
+name: AETHER public demo safety checks
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'tests/test_run_limits.py'
+      - '.github/workflows/demo-run-limits.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing app dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Verify demo limits and read-only routes using disposable SQLite
+        run: python -m unittest discover -s tests -p 'test_run_limits.py' -v
+  smoke-live:
+    # These requests check EXISTING production, not this unmerged branch.
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check public AETHER and VaultCore endpoints (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in 'AETHER|https://aether-infinity.onrender.com/health' 'VaultCore|https://vaultcore-app.onrender.com/'; do
+            name="${spec%%|*}"
+            url="${spec#*|}"
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 12 --max-time 100 -o /tmp/public-smoke \
+              -w '%{http_code} %{time_total} %{size_download}' "$url")
+            read -r code seconds bytes <<< "$metrics"
+            echo "$name GET: HTTP=$code total_seconds=$seconds bytes=$bytes"
+            test "$code" = 200
+          done
