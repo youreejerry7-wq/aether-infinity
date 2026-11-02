@@ -143,6 +143,7 @@ async function loadAuto() {
     try {
       const r = await fetch('/api/research');
       if (r.ok) data = await r.json();
+      else errorSource = 'Research archive temporarily unavailable.';
     } catch (_) {
       errorSource = 'Research archive temporarily unavailable.';
     }
