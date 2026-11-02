@@ -4,7 +4,8 @@ import math
 import random
 import datetime
 import pathlib
-import sys
+import os
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent
 OUT = ROOT / "data" / "research.json"
@@ -115,20 +116,33 @@ def run_research_cycle(seed=None, out_path=OUT, z_threshold=DEFAULT_Z_THRESHOLD)
         )
     }
 
-    try:
-        old_data = []
-        if out_path.exists():
-            content = out_path.read_text(encoding="utf-8")
-            if content.strip():
-                old_data = json.loads(content)
-                if not isinstance(old_data, list):
-                    old_data = []
-    except Exception as e:
-        print(f"Warning: could not read existing research log at {out_path}: {e}", file=sys.stderr)
-        old_data = []
+    # Never discard a malformed or unreadable archive: it may contain history
+    # that needs manual recovery. A failed cycle must not destroy prior data.
+    old_data = []
+    if out_path.exists():
+        content = out_path.read_text(encoding="utf-8")
+        old_data = json.loads(content)
+        if not isinstance(old_data, list):
+            raise ValueError("Research archive must be a JSON list")
 
     old_data.insert(0, record)
-    out_path.write_text(json.dumps(old_data[:100], indent=2) + "\n", encoding="utf-8")
+    # Atomic replacement prevents interrupted writes from truncating the
+    # previously valid archive. Keep the temporary file on the same filesystem.
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=out_path.parent,
+        prefix=".research-", suffix=".tmp", delete=False
+    ) as handle:
+        temp_path = pathlib.Path(handle.name)
+        try:
+            json.dump(old_data[:100], handle, indent=2)
+            handle.write("\n")
+        except BaseException:
+            temp_path.unlink(missing_ok=True)
+            raise
+    try:
+        os.replace(temp_path, out_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
     return record
 
 
