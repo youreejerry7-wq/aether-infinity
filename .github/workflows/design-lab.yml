@@ -1,0 +1,23 @@
+name: AETHER bounded design sandbox
+on:
+  pull_request:
+    paths:
+      - 'design_lab.py'
+      - 'tests/test_design_lab.py'
+      - '.github/workflows/design-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  geometry-holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify seeded search and independent holdout controls
+        run: python -m unittest discover -s tests -p 'test_design_lab.py' -v
+      - name: Produce deterministic simulation-only report
+        run: python design_lab.py
