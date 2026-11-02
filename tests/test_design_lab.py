@@ -80,6 +80,32 @@ class BoxDesignLabTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     lab.continuous_training_optimum(sheets)
 
+    def test_openstax_textbook_reference(self):
+        # Independent published 24 x 36 example: x = 10 - 2*sqrt(7).
+        # Formula works in inches here; the sandbox's sheets use centimeters.
+        reference_cut = 10 - 2 * math.sqrt(7)
+        reference_volume = 640 + 448 * math.sqrt(7)
+        self.assertAlmostEqual(lab.box_volume(24, 36, reference_cut),
+                               reference_volume, places=8)
+        self.assertAlmostEqual(
+            lab.continuous_training_optimum(((24, 36),)),
+            reference_cut, places=8)
+
+    def test_prior_art_is_cited_and_no_novelty_claim_is_made(self):
+        report = lab.run()
+        self.assertEqual(report["model_prior_art_status"],
+                         "established_textbook_example")
+        self.assertEqual(report["novelty_status"], "not_assessed")
+        self.assertFalse(report["physical_validation"])
+        self.assertIn("no patent search", report["novelty_scope"])
+        sources = report["prior_art_evidence"]
+        self.assertEqual(len(sources), 1)
+        self.assertIn("openstax.org/books/calculus-volume-1",
+                      sources[0]["url"])
+        self.assertIn("20 by 30", sources[0]["known_result"])
+        self.assertEqual(sources[0]["evidence_level"],
+                         "established_textbook_model")
+
     def test_report_reproducible_and_honestly_labeled(self):
         a = lab.run()
         self.assertEqual(a, lab.run())
