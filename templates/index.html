@@ -187,9 +187,9 @@ async function loadAuto() {
   document.getElementById('val-cycles').textContent = data.length;
   document.getElementById('val-threshold').textContent = '|z| > ' + (latest.z_threshold || 3.29);
 
-  if (latest.interpretation) {
-    autoInterpretation.textContent = latest.interpretation;
-  }
+  // Clear prior-cycle interpretation when the next cycle omits this field.
+  autoInterpretation.textContent = typeof latest.interpretation === 'string'
+    ? latest.interpretation : '';
 
   // Render only error names as inert text; never display raw diagnostics.
   autoErrors.textContent = '';
