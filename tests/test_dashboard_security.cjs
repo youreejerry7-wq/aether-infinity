@@ -121,7 +121,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(archiveRequests()[0].url, 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json');
   assert.equal(archiveRequests()[0].options.cache, 'default', 'Allow browser caching');
   assert.equal(intervals.length, 1);
-  assert.equal(intervals[0].ms, 300000, 'Refresh at most every five minutes');
+  assert.equal(intervals[0].ms, 30000, '30-second wakeup allows bounded retries; successful fetches remain throttled for five minutes');
   assert.equal(typeof listeners.visibilitychange, 'function');
   await context.loadAuto();
   assert.equal(archiveRequests().length, 1, 'Repeated visible refresh is throttled');
@@ -180,6 +180,17 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes['auto-experiments'].children.length, 0);
   assert.equal(nodes['auto-errors'].children.length, 0);
   assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+  const requestsAfterFailure = archiveRequests().length;
+  clockMs += 29999;
+  await context.loadAuto();
+  assert.equal(archiveRequests().length, requestsAfterFailure,
+    'Do not retry a failed archive before 30 seconds');
+  clockMs += 1;
+  failArchive = false;
+  await context.loadAuto();
+  assert.equal(archiveRequests().length, requestsAfterFailure + 1,
+    'Retry an unavailable archive after 30 seconds instead of five minutes');
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
 
   // A stalled GitHub request must abort and use the bounded server snapshot fallback.
   failArchive = false;
@@ -199,6 +210,12 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(fallbackRequest.url, '/api/research');
   assert.ok(fallbackRequest.options.signal, 'Fallback must also be abortable');
   assert.equal(timeoutTasks.at(-1).active, false, 'Fallback timer must be cleared');
+  const requestsAfterFallback = archiveRequests().length;
+  clockMs += 30000;
+  await context.loadAuto();
+  assert.equal(archiveRequests().length, requestsAfterFallback + 1,
+    'A potentially stale server snapshot triggers a 30-second GitHub retry');
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
 
   // If both sources hang, neither the lock nor stale data may survive the timeout.
   hangGitHub = true;
