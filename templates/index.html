@@ -111,6 +111,9 @@
 <script>
 const archiveRefreshMs = 300000;
 const archiveTimeoutMs = 15000;
+// Bound DOM work even if a malformed or oversized archive contains many records.
+const maxDisplayedArchiveErrors = 20;
+const maxDisplayedArchiveExperiments = 50;
 // Keep the abort timer alive through JSON body parsing, not just response headers.
 async function fetchArchiveJsonWithTimeout(url, options = {}) {
   const controller = new AbortController();
@@ -200,19 +203,22 @@ async function loadAuto() {
     heading.textContent = 'Recorded cycle errors:';
     box.appendChild(heading);
     const list = document.createElement('ul');
-    for (const err of latest.errors) {
+    for (const err of latest.errors.slice(0, maxDisplayedArchiveErrors)) {
       const item = document.createElement('li');
       item.textContent = String(err && err.name || 'Unnamed experiment');
       list.appendChild(item);
     }
     box.appendChild(list);
     autoErrors.appendChild(box);
+    if (latest.errors.length > maxDisplayedArchiveErrors) {
+      autoStatus.textContent += ` Showing first ${maxDisplayedArchiveErrors} of ${latest.errors.length} errors.`;
+    }
   }
 
   // API/archive values are untrusted. Use textContent, never HTML interpolation.
   autoExperiments.textContent = '';
   if (Array.isArray(latest.experiments)) {
-    for (const exp of latest.experiments) {
+    for (const exp of latest.experiments.slice(0, maxDisplayedArchiveExperiments)) {
       const row = document.createElement('tr');
       const values = [
         String(exp && exp.name || 'Unnamed experiment'),
@@ -229,6 +235,9 @@ async function loadAuto() {
         row.appendChild(cell);
       }
       autoExperiments.appendChild(row);
+    }
+    if (latest.experiments.length > maxDisplayedArchiveExperiments) {
+      autoStatus.textContent += ` Showing first ${maxDisplayedArchiveExperiments} of ${latest.experiments.length} experiments.`;
     }
   }
   } finally {
