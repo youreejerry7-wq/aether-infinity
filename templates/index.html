@@ -111,11 +111,14 @@
 <script>
 const archiveRefreshMs = 300000;
 const archiveTimeoutMs = 15000;
-async function fetchArchiveWithTimeout(url, options = {}) {
+// Keep the abort timer alive through JSON body parsing, not just response headers.
+async function fetchArchiveJsonWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), archiveTimeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) return null;
+    return await response.json();
   } finally {
     clearTimeout(timeout);
   }
@@ -140,19 +143,16 @@ async function loadAuto() {
   // Prefer the up-to-date GitHub archive; the deployed Flask copy may lag behind main.
   let fromGitHub = false;
   try {
-    const r = await fetchArchiveWithTimeout('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
-    if (r.ok) {
-      data = await r.json();
-      fromGitHub = Array.isArray(data) && data.length > 0;
-    }
+    data = await fetchArchiveJsonWithTimeout('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
+    fromGitHub = Array.isArray(data) && data.length > 0;
   } catch (_) {
     // The deployed server snapshot is a read-only fallback.
   }
 
   if (!fromGitHub) {
     try {
-      const r = await fetchArchiveWithTimeout('/api/research');
-      if (r.ok) data = await r.json();
+      const fallbackData = await fetchArchiveJsonWithTimeout('/api/research');
+      if (fallbackData !== null) data = fallbackData;
       else errorSource = 'Research archive temporarily unavailable.';
     } catch (_) {
       errorSource = 'Research archive temporarily unavailable.';
