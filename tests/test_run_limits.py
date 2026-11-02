@@ -70,5 +70,30 @@ class DemoRunLimitsTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/results").status_code, 200)
 
 
+    def test_rolling_window_expires_only_oldest_request(self):
+        # This is a sliding window, not a reset at an arbitrary minute boundary.
+        self.assertEqual(self.client.post("/api/run").status_code, 200)
+        self.now += 1
+        for _ in range(demo.RUN_MAX_PER_WINDOW - 1):
+            self.assertEqual(self.client.post("/api/run").status_code, 200)
+        self.now += demo.RUN_WINDOW_SECONDS - 2
+        blocked = self.client.post("/api/run")
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(blocked.headers["Retry-After"], "1")
+        self.now += 1
+        self.assertEqual(self.client.post("/api/run").status_code, 200)
+        blocked = self.client.post("/api/run")
+        self.assertEqual(blocked.status_code, 429)
+        self.assertEqual(blocked.headers["Retry-After"], "1")
+
+    def test_failed_computation_releases_slot_for_next_request(self):
+        # A synthetic exception must not permanently exhaust concurrency.
+        with patch.object(demo.random, "random", side_effect=RuntimeError("synthetic failure")):
+            with self.assertRaisesRegex(RuntimeError, "synthetic failure"):
+                self.client.post("/api/run")
+        self.assertEqual(self.client.post("/api/run").status_code, 200)
+        self.assertEqual(len(self.client.get("/api/results").json), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
