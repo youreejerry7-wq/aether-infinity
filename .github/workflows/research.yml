@@ -30,4 +30,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/research.json
-          git diff --cached --quiet || (git commit -m "Record scheduled research cycle" && git push)
+          # Synthetic archive updates are not application releases.
+          # Render recognizes [skip render] on connected Git-provider auto-deploys.
+          git diff --cached --quiet || (git commit -m "Record scheduled research cycle [skip render]" && git push)
