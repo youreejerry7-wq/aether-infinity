@@ -172,6 +172,41 @@ class SpeedLabTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 benchmark_matched_time(**kwargs)
 
+    def test_runtime_context_and_measured_sampling_throughput(self):
+        # These metrics describe this machine/run, not a universal speedup.
+        reports = [
+            benchmark(samples=300, replicates=2, seed=5),
+            benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=5),
+        ]
+        for report in reports:
+            with self.subTest(mode=report["methodology"][:32]):
+                env = report["environment"]
+                self.assertTrue(env["python_version"])
+                self.assertTrue(env["os_family"])
+                self.assertTrue(env["machine_architecture"])
+                self.assertGreater(env["perf_counter_resolution_seconds"], 0)
+                self.assertIn("not measured", env["caveat"])
+                for name, metrics in report["results"].items():
+                    n = metrics.get(
+                        "sampling_units_per_replication",
+                        report.get("samples_per_replication"),
+                    )
+                    duration = metrics.get(
+                        "median_observed_seconds",
+                        metrics.get("median_seconds_per_replication"),
+                    )
+                    self.assertGreater(duration, 0)
+                    self.assertAlmostEqual(
+                        metrics["sampling_units_per_second"] * duration,
+                        n, places=6,
+                    )
+                    if "integrand_evaluations_per_second" in metrics:
+                        evaluations_per_unit = 2 if name == "antithetic_1d" else 1
+                        self.assertAlmostEqual(
+                            metrics["integrand_evaluations_per_second"] * duration,
+                            n * evaluations_per_unit, places=6,
+                        )
+
     def test_does_not_write_research_archive(self):
         # The script is an isolated, pure experiment; no output persisted.
         before = Path("data/research.json")
