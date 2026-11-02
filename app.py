@@ -41,13 +41,14 @@ def run():
 @app.get('/api/research')
 def research_data():
     """Returns local scheduled research history from data/research.json."""
-    if not RESEARCH_JSON_PATH.exists():
-        return jsonify([])
     try:
+        if not RESEARCH_JSON_PATH.exists():
+            return jsonify([])
         data = json.loads(RESEARCH_JSON_PATH.read_text(encoding='utf-8'))
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except (OSError, ValueError):
+        # Archive errors are not public diagnostics; never return filesystem details.
+        return jsonify({"error": "Research archive temporarily unavailable."}), 500
+    return jsonify(data)
 
 @app.get('/health')
 def health():
