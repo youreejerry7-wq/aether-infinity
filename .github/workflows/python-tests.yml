@@ -52,3 +52,16 @@ jobs:
               archive) python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); assert isinstance(data,list) and data; print("Simulated cycles:",len(data))' "$output" ;;
             esac
           done
+          # First-in-job is not necessarily a cold start. Record sequential follow-ups
+          # to separate transient wake-up latency from steady-state response time.
+          for endpoint in health homepage; do
+            case "$endpoint" in
+              health) url="https://aether-infinity.onrender.com/health" ;;
+              homepage) url="https://aether-infinity.onrender.com/" ;;
+            esac
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o /dev/null -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r code ttfb total bytes <<< "$metrics"
+            echo "GET followup-$endpoint: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+            test "$code" = 200
+          done
