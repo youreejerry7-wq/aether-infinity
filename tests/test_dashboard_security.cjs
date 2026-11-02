@@ -42,8 +42,19 @@ let results = [{
   expected: 3.14159, deviation: 0.00159, status: hostile,
 }];
 let failArchive = false;
+let hangGitHub = false;
+let hangFallback = false;
 const fetch = async (url, options) => {
   requests.push({url, options});
+  const shouldHang = (hangGitHub && url.startsWith('https://raw.githubusercontent.com/')) ||
+    (hangFallback && url === '/api/research');
+  if (shouldHang) {
+    if (url === '/api/research') hangFallback = false;
+    else hangGitHub = false;
+    return new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new Error('Timed out')), { once: true });
+    });
+  }
   if (url === '/api/research') return { ok: !failArchive, json: async () => archive };
   if (url.startsWith('https://raw.githubusercontent.com/'))
     return { ok: !failArchive, json: async () => archive };
@@ -51,7 +62,18 @@ const fetch = async (url, options) => {
   if (url === '/api/run') return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159 }) };
   throw Error('Unexpected fetch ' + url);
 };
-const context = { document, fetch, Date: FakeDate, setInterval: (fn, ms) => intervals.push({fn, ms}) };
+const timeoutTasks = [];
+const fakeSetTimeout = (fn, ms) => {
+  const task = { fn, ms, active: true };
+  timeoutTasks.push(task);
+  return task;
+};
+const fakeClearTimeout = task => { task.active = false; };
+const context = {
+  document, fetch, Date: FakeDate, AbortController,
+  setInterval: (fn, ms) => intervals.push({fn, ms}),
+  setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout,
+};
 const settle = () => new Promise(resolve => setImmediate(resolve));
 (async () => {
   vm.runInNewContext(match[1], context);
@@ -94,6 +116,49 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes['auto-experiments'].children.length, 0);
   assert.equal(nodes['auto-errors'].children.length, 0);
   assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+
+  // A stalled GitHub request must abort and use the bounded server snapshot fallback.
+  failArchive = false;
+  hangGitHub = true;
+  clockMs += 300000;
+  const primaryPending = context.loadAuto();
+  await settle();
+  const primaryTimeout = timeoutTasks.at(-1);
+  assert.equal(primaryTimeout.ms, 15000, 'GitHub archive request must be bounded');
+  assert.equal(primaryTimeout.active, true);
+  primaryTimeout.fn();
+  await primaryPending;
+  assert.equal(primaryTimeout.active, false);
+  assert.ok(nodes['auto-status'].textContent.includes('snapshot'),
+    'GitHub timeout should allow a clearly labeled server snapshot');
+  const fallbackRequest = requests.at(-1);
+  assert.equal(fallbackRequest.url, '/api/research');
+  assert.ok(fallbackRequest.options.signal, 'Fallback must also be abortable');
+  assert.equal(timeoutTasks.at(-1).active, false, 'Fallback timer must be cleared');
+
+  // If both sources hang, neither the lock nor stale data may survive the timeout.
+  hangGitHub = true;
+  hangFallback = true;
+  clockMs += 300000;
+  const bothPending = context.loadAuto();
+  await settle();
+  const firstTimeout = timeoutTasks.at(-1);
+  firstTimeout.fn();
+  await settle();
+  const secondTimeout = timeoutTasks.at(-1);
+  assert.notEqual(secondTimeout, firstTimeout, 'Fallback gets its own timeout');
+  assert.equal(secondTimeout.ms, 15000);
+  secondTimeout.fn();
+  await bothPending;
+  assert.equal(secondTimeout.active, false);
+  assert.equal(nodes['auto-summary'].style.display, 'none');
+  assert.equal(nodes['auto-experiments'].children.length, 0);
+  assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+
+  // A subsequent scheduled refresh must recover after the stalled requests.
+  clockMs += 300000;
+  await context.loadAuto();
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
 
   // Malformed demo rows must show a safe error instead of partial rendering.
   results = [{ created: hostile, trials: 20000, estimate: 'invalid', expected: 3.14, deviation: 0, status: hostile }];
