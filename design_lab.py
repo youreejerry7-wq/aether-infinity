@@ -8,6 +8,7 @@ Candidate selection sees ONLY seeded training cases. Fixed holdout cases are
 evaluated AFTER selection and are never used to rank candidates.
 """
 import json
+import math
 import random
 import statistics
 
@@ -41,6 +42,27 @@ def mean_volume(sheets, cut):
     return statistics.fmean(box_volume(w, h, cut) for w, h in sheets)
 
 
+def continuous_training_optimum(sheets):
+    """Analytic reference for the mean cubic volume on feasible training sheets.
+
+    d(mean V)/dx = mean(W*H) - 4*mean(W+H)*x + 12*x*x.
+    The smaller stationary root maximizes volume within the common feasible
+    interval. This is an oracle for this known geometry, not an invention.
+    """
+    if not sheets or any(
+        not (math.isfinite(w) and math.isfinite(h) and w > 0 and h > 0)
+        for w, h in sheets
+    ):
+        raise ValueError("Expected nonempty finite positive sheet dimensions")
+    sum_dimensions = statistics.fmean(w + h for w, h in sheets)
+    area = statistics.fmean(w * h for w, h in sheets)
+    discriminant = sum_dimensions ** 2 - 3 * area
+    optimum = (sum_dimensions - math.sqrt(discriminant)) / 6
+    if not 0 < optimum < min(min(w, h) for w, h in sheets) / 2:
+        raise ValueError("Continuous optimum outside common feasible range")
+    return optimum
+
+
 def evaluate(cut, holdout=HOLDOUT_SHEETS):
     """Holdout check versus a predeclared baseline; no training score used."""
     baseline = [box_volume(w, h, BASELINE_CUT) for w, h in holdout]
@@ -62,6 +84,9 @@ def run(seed=SEED):
     scores = {cut: mean_volume(sheets, cut) for cut in CUT_GRID}
     # Fixed grid and deterministic tie-break; no adaptive holdout peeking.
     selected = max(CUT_GRID, key=lambda cut: (scores[cut], -cut))
+    continuous_optimum = continuous_training_optimum(sheets)
+    continuous_score = mean_volume(sheets, continuous_optimum)
+    grid_regret = max(0.0, continuous_score - scores[selected])
     candidate = evaluate(selected)
     negative = evaluate(NEGATIVE_CONTROL_CUT)
     return {
@@ -77,6 +102,10 @@ def run(seed=SEED):
         "grid_cuts_cm": list(CUT_GRID),
         "baseline_cut_cm": BASELINE_CUT,
         "selected_training_mean_volume_cm3": scores[selected],
+        "continuous_training_optimum_cut_cm": continuous_optimum,
+        "continuous_training_optimum_mean_volume_cm3": continuous_score,
+        "grid_discretization_regret_cm3": grid_regret,
+        "reference_method": "Analytic stationary point of mean cubic volume; training-only, not a novelty claim",
         "baseline_training_mean_volume_cm3": scores[BASELINE_CUT],
         "holdout_sheets_cm": [list(pair) for pair in HOLDOUT_SHEETS],
         "candidate": {**candidate, "evidence_level": "simulation_candidate" if candidate["passed_all_holdouts"] else "rejected_simulation_candidate"},
