@@ -25,5 +25,8 @@ jobs:
       - name: Show reproducible benchmark
         run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
 
+      # 0.02 s capped all methods at 82,958 units on a 2026-11-02 runner,
+      # making the nominal matched-time comparison an equal-units comparison.
+      # A smaller target leaves room for method-specific calibration within budget.
       - name: Show measured matched-time trials (bounded)
-        run: python speed_lab.py --matched-seconds 0.02 --replicates 8 --seed 2026
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 8 --seed 2026
