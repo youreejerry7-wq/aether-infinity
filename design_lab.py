@@ -18,7 +18,7 @@ TRAIN_SHEET = (20.0, 30.0)
 HOLDOUT_SHEETS = ((18.0, 32.0), (22.0, 28.0), (19.0, 31.0))
 CUT_GRID = tuple(step / 2 for step in range(1, 19))  # 0.5 to 9.0 cm
 BASELINE_CUT = 2.0
-NEGATIVE_CONTROL_CUT = 9.0
+NEGATIVE_CONTROL_CUT = 7.5  # Feasible on every holdout; intentionally suboptimal
 
 # Checked against the cited public textbook example on 2026-11-02.
 # This establishes that the mathematical model is prior art, not a new invention.
@@ -35,6 +35,8 @@ PRIOR_ART = (
 
 def box_volume(width, height, cut):
     """Model volume in cm^3; invalid geometry has zero usable volume."""
+    if not all(math.isfinite(value) for value in (width, height, cut)):
+        return 0.0
     if width <= 0 or height <= 0 or not 0 < cut < min(width, height) / 2:
         return 0.0
     return cut * (width - 2 * cut) * (height - 2 * cut)
