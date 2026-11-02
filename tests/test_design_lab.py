@@ -48,6 +48,38 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(selected, lab.run()["candidate"]["cut_cm"])
         self.assertEqual(lab.HOLDOUT_SHEETS, ((18.0, 32.0), (22.0, 28.0), (19.0, 31.0)))
 
+    def test_analytic_oracle_matches_independent_dense_grid(self):
+        # Independent numerical sweep catches wrong derivative/root selection.
+        sheets = lab.training_sheets(lab.SEED)
+        optimum = lab.continuous_training_optimum(sheets)
+        dense = (i / 1000 for i in range(1, 9000))
+        numeric_optimum = max(dense, key=lambda x: lab.mean_volume(sheets, x))
+        self.assertLess(abs(optimum - numeric_optimum), 0.0011)
+        self.assertGreater(lab.mean_volume(sheets, optimum), 0)
+        self.assertGreaterEqual(lab.mean_volume(sheets, optimum),
+                                lab.mean_volume(sheets, lab.run()["candidate"]["cut_cm"]))
+
+    def test_grid_discretization_regret_is_bounded_and_reported(self):
+        report = lab.run()
+        optimum = report["continuous_training_optimum_cut_cm"]
+        selected = report["candidate"]["cut_cm"]
+        self.assertLessEqual(abs(optimum - selected), 0.25)
+        self.assertGreaterEqual(report["grid_discretization_regret_cm3"], 0)
+        self.assertAlmostEqual(
+            report["grid_discretization_regret_cm3"],
+            report["continuous_training_optimum_mean_volume_cm3"]
+            - report["selected_training_mean_volume_cm3"],
+            places=9,
+        )
+        self.assertIn("Analytic stationary point", report["reference_method"])
+
+    def test_analytic_reference_rejects_invalid_dimensions(self):
+        for sheets in ((), ((0, 30),), ((float("nan"), 30),),
+                       ((20, float("inf")),)):
+            with self.subTest(sheets=sheets):
+                with self.assertRaises(ValueError):
+                    lab.continuous_training_optimum(sheets)
+
     def test_report_reproducible_and_honestly_labeled(self):
         a = lab.run()
         self.assertEqual(a, lab.run())
