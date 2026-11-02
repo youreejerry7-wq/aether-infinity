@@ -48,6 +48,8 @@ let runMode = 'ok';
 let hangGitHub = false;
 let hangFallback = false;
 let hangArchiveBody = false;
+let hangResultsBody = false;
+let hangRunBody = false;
 const fetch = async (url, options) => {
   requests.push({url, options});
   const shouldHang = (hangGitHub && url.startsWith('https://raw.githubusercontent.com/')) ||
@@ -69,6 +71,12 @@ const fetch = async (url, options) => {
   if (url.startsWith('https://raw.githubusercontent.com/'))
     return { ok: !failArchive, json: async () => archive };
   if (url === '/api/results') {
+    if (hangResultsBody) {
+      hangResultsBody = false;
+      return { ok: true, json: () => new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('GET body timed out')), { once: true });
+      }) };
+    }
     if (resultsMode === 'delayed') return new Promise(resolve => { resolveDelayedResults = resolve; });
     if (resultsMode === 'hang') return new Promise((resolve, reject) => {
       assert.ok(options.signal, 'Results GET must be abortable');
@@ -77,6 +85,12 @@ const fetch = async (url, options) => {
     return { ok: true, json: async () => results };
   }
   if (url === '/api/run') {
+    if (hangRunBody) {
+      hangRunBody = false;
+      return { ok: true, json: () => new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('POST body timed out')), { once: true });
+      }) };
+    }
     if (runMode === 'hang') return new Promise((resolve, reject) => {
       assert.ok(options.signal, 'Experiment POST must be abortable');
       options.signal.addEventListener('abort', () => reject(new Error('POST timed out')), { once: true });
@@ -258,6 +272,20 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.results.children[0].children[0].textContent,
     'Interactive results temporarily unavailable.');
 
+  // Headers can arrive before a JSON body stalls; the GET must still time out.
+  resultsMode = 'ok';
+  hangResultsBody = true;
+  const hangingGetBody = context.loadInteractive();
+  await settle();
+  const getBodyTimeout = timeoutTasks.at(-1);
+  assert.equal(getBodyTimeout.ms, 60000);
+  assert.equal(getBodyTimeout.active, true);
+  getBodyTimeout.fn();
+  await hangingGetBody;
+  assert.equal(getBodyTimeout.active, false);
+  assert.equal(nodes.results.children[0].children[0].textContent,
+    'Interactive results temporarily unavailable.');
+
   // Successful POST feedback and button recovery must not wait on a stalled GET.
   const runWithHangingGet = nodes.run.onclick();
   await runWithHangingGet;
@@ -286,6 +314,20 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   postTimeout.fn();
   await hangingPost;
   assert.equal(postTimeout.active, false);
+  assert.equal(nodes.run.disabled, false);
+  assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
+
+  // A successful POST header with a stalled JSON body must not strand the button.
+  runMode = 'ok';
+  hangRunBody = true;
+  const hangingPostBody = nodes.run.onclick();
+  await settle();
+  const postBodyTimeout = timeoutTasks.at(-1);
+  assert.equal(postBodyTimeout.ms, 90000);
+  assert.equal(postBodyTimeout.active, true);
+  postBodyTimeout.fn();
+  await hangingPostBody;
+  assert.equal(postBodyTimeout.active, false);
   assert.equal(nodes.run.disabled, false);
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
 
