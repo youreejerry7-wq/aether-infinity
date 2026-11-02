@@ -9,12 +9,29 @@ Elapsed time is measured; acceleration is never assumed.
 import argparse
 import json
 import math
+import os
+import platform
 import random
 import statistics
 import time
 
 
 MAX_TOTAL_SAMPLES = 2_000_000
+
+
+def benchmark_environment():
+    """Non-identifying runtime context for interpreting local timing results."""
+    return {
+        "python_version": platform.python_version(),
+        "os_family": platform.system(),
+        "machine_architecture": platform.machine(),
+        "logical_cpu_count_reported": os.cpu_count(),
+        "perf_counter_resolution_seconds": time.get_clock_info("perf_counter").resolution,
+        "caveat": (
+            "CPU quotas, processor model, background load and energy use "
+            "are not measured; timings are not portable hardware benchmarks."
+        ),
+    }
 
 
 def circle_hits(samples, rng):
@@ -109,6 +126,11 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             "mean_absolute_error": statistics.mean(abs(error) for error in errors),
             "average_estimate": statistics.mean(estimates),
             "median_seconds_per_replication": median_time,
+            "sampling_units_per_second": samples / median_time if median_time > 0 else None,
+            "integrand_evaluations_per_second": (
+                samples * (2 if name == "antithetic_1d" else 1) / median_time
+                if median_time > 0 else None
+            ),
             "random_draws_per_sampling_unit": 2 if name == "circle_hits" else 1,
             "integrand_evaluations_per_sampling_unit": 2 if name == "antithetic_1d" else 1,
             "standard_error_basis": "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic",
@@ -146,6 +168,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         )
 
     return {
+        "environment": benchmark_environment(),
         "reference": "pi",
         "target_value": math.pi,
         "samples_per_replication": samples,
@@ -202,16 +225,21 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "conditional_1d": 32 / 3 - math.pi ** 2,
             "antithetic_1d": antithetic_unit_variance_midpoint(),
         }[name]
+        median_observed = statistics.median(durations)
         results[name] = {
             "sampling_units_per_replication": samples,
+            "sampling_units_per_second": (
+                samples / median_observed if median_observed > 0 else None
+            ),
             "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
             "theoretical_standard_error": math.sqrt(unit_variance / samples),
-            "median_observed_seconds": statistics.median(durations),
+            "median_observed_seconds": median_observed,
             "min_observed_seconds": min(durations),
             "max_observed_seconds": max(durations),
             "sample_cap_reached": samples == max_samples,
         }
     return {
+        "environment": benchmark_environment(),
         "reference": "pi",
         "methodology": (
             "Measured trials with separately calibrated sampling-unit counts near "
