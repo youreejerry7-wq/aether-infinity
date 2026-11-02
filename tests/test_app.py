@@ -40,7 +40,8 @@ def test_health_never_reflects_unvalidated_revision(client, monkeypatch, invalid
     response = client.get("/health")
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
-    assert invalid.encode() not in response.data if invalid else True
+    if invalid:
+        assert invalid.encode() not in response.data
 
 
 def test_home_page(client):
