@@ -96,6 +96,10 @@ const fetch = async (url, options) => {
       assert.ok(options.signal, 'Experiment POST must be abortable');
       options.signal.addEventListener('abort', () => reject(new Error('POST timed out')), { once: true });
     });
+    if (runMode === 'rate-limited') return {
+      ok: false, status: 429,
+      json: async () => ({ error: 'private server diagnostic' }),
+    };
     if (runMode === 'malformed') return { ok: true, json: async () => ({ estimate: 'invalid', deviation: 0 }) };
     return { ok: true, json: async () => ({ estimate: 3.14, deviation: 0.00159 }) };
   }
@@ -343,6 +347,14 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await nodes.run.onclick();
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
   assert.equal(nodes.run.disabled, false);
+
+  // A bounded server can return 429: give useful, non-technical feedback and
+  // restore the button without reading or exposing the response body.
+  runMode = 'rate-limited';
+  await nodes.run.onclick();
+  assert.equal(nodes.message.textContent, 'Demo temporarily busy. Please retry later.');
+  assert.equal(nodes.run.disabled, false);
+  assert.ok(!nodes.message.textContent.includes('private server diagnostic'));
 
   // A stalled POST must abort after 90 seconds and recover without exposing diagnostics.
   runMode = 'hang';
