@@ -68,6 +68,27 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(lab.HOLDOUT_SHEETS,
                          ((18.0, 32.0), (22.0, 28.0), (19.0, 31.0)))
 
+    def test_holdout_rejects_invalid_or_infeasible_fixtures(self):
+        invalid_cases = (
+            (4.0, ()),
+            (4.0, ((0.0, 30.0),)),
+            (4.0, ((float("nan"), 30.0),)),
+            (4.0, ((20.0, float("inf")),)),
+            (9.0, ((18.0, 32.0),)),
+            (4.0, ((3.0, 30.0),)),
+            (float("nan"), lab.HOLDOUT_SHEETS),
+        )
+        for cut, holdout in invalid_cases:
+            with self.subTest(cut=cut, holdout=holdout):
+                with self.assertRaises(ValueError):
+                    lab.evaluate(cut, holdout=holdout)
+
+    def test_valid_holdout_results_remain_unchanged(self):
+        result = lab.evaluate(4.0)
+        self.assertEqual(result["holdout_improvements_cm3"],
+                         [176.0, 256.0, 202.0])
+        self.assertTrue(result["passed_all_holdouts"])
+
     def test_analytic_oracle_matches_independent_dense_grid(self):
         # Independent numerical sweep catches wrong derivative/root selection.
         sheets = lab.training_sheets(lab.SEED)
