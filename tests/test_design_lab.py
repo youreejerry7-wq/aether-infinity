@@ -52,12 +52,21 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(report["negative_control"]["evidence_level"], "rejected_simulation_candidate")
 
     def test_holdout_not_used_to_select_candidate(self):
-        # Evaluating alternate holdouts cannot change the training-only selection.
-        selected = lab.run()["candidate"]["cut_cm"]
-        altered_holdout = ((12.0, 12.0), (40.0, 40.0))
-        _ = lab.evaluate(selected, holdout=altered_holdout)
-        self.assertEqual(selected, lab.run()["candidate"]["cut_cm"])
-        self.assertEqual(lab.HOLDOUT_SHEETS, ((18.0, 32.0), (22.0, 28.0), (19.0, 31.0)))
+        # Actually substitute the holdout used by run(), not merely call
+        # evaluate() independently; the training-selected cut must not change.
+        from unittest.mock import patch
+        original = lab.run()
+        altered_holdout = ((16.0, 34.0), (24.0, 28.0))
+        with patch.object(lab, "HOLDOUT_SHEETS", altered_holdout):
+            alternate = lab.run()
+        self.assertEqual(original["candidate"]["cut_cm"],
+                         alternate["candidate"]["cut_cm"])
+        self.assertEqual(alternate["holdout_sheets_cm"],
+                         [list(pair) for pair in altered_holdout])
+        self.assertNotEqual(original["candidate"]["holdout_volumes_cm3"],
+                            alternate["candidate"]["holdout_volumes_cm3"])
+        self.assertEqual(lab.HOLDOUT_SHEETS,
+                         ((18.0, 32.0), (22.0, 28.0), (19.0, 31.0)))
 
     def test_analytic_oracle_matches_independent_dense_grid(self):
         # Independent numerical sweep catches wrong derivative/root selection.
