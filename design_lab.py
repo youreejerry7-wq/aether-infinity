@@ -79,6 +79,15 @@ def continuous_training_optimum(sheets):
 
 def evaluate(cut, holdout=HOLDOUT_SHEETS):
     """Holdout check versus a predeclared baseline; no training score used."""
+    # Reject invalid test fixtures rather than silently scoring zero-volume
+    # geometry as a meaningful failure or success.
+    if not holdout or not math.isfinite(cut) or cut <= 0:
+        raise ValueError("Expected nonempty holdout and finite positive cut")
+    for width, height in holdout:
+        if not all(math.isfinite(v) for v in (width, height)):
+            raise ValueError("Holdout dimensions must be finite")
+        if not 0 < BASELINE_CUT < min(width, height) / 2 or not 0 < cut < min(width, height) / 2:
+            raise ValueError("Both baseline and candidate cuts must be feasible")
     baseline = [box_volume(w, h, BASELINE_CUT) for w, h in holdout]
     candidate = [box_volume(w, h, cut) for w, h in holdout]
     differences = [a - b for a, b in zip(candidate, baseline)]
