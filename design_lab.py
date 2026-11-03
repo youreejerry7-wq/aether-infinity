@@ -101,8 +101,10 @@ def run(seed=SEED):
     continuous_optimum = continuous_training_optimum(sheets)
     continuous_score = mean_volume(sheets, continuous_optimum)
     grid_regret = max(0.0, continuous_score - scores[selected])
-    candidate = evaluate(selected)
-    negative = evaluate(NEGATIVE_CONTROL_CUT)
+    # Pass the predeclared holdout explicitly so review tests can replace it
+    # without changing the training-only candidate selection.
+    candidate = evaluate(selected, holdout=HOLDOUT_SHEETS)
+    negative = evaluate(NEGATIVE_CONTROL_CUT, holdout=HOLDOUT_SHEETS)
     return {
         "problem": "Open-top folded box from rectangular sheet (synthetic geometry)",
         "formula": "V=x*(W-2*x)*(H-2*x), 0<x<min(W,H)/2",
