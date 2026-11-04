@@ -174,7 +174,7 @@ async function loadAuto() {
     }
   }
 
-  if (!Array.isArray(data) || !data.length || !data[0] || typeof data[0] !== 'object') {
+  if (!isUsableArchive(data)) {
     autoSummary.style.display = 'none';
     autoTable.style.display = 'none';
     autoExperiments.textContent = '';
