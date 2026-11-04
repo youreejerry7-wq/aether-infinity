@@ -189,6 +189,19 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes['auto-summary'].style.display, 'none',
     'Invalid primary and fallback cycles must not appear verified');
   assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+  // A malformed primary archive plus a failed fallback must not display a fake run.
+  archive = [{ time: 'invalid timestamp', status: 'completed', errors: [], experiments: [] }];
+  hangFallback = true;
+  clockMs += 30000;
+  const malformedWithTimeout = context.loadAuto();
+  await settle();
+  const malformedFallbackTimer = timeoutTasks.at(-1);
+  assert.equal(malformedFallbackTimer.ms, 15000);
+  malformedFallbackTimer.fn();
+  await malformedWithTimeout;
+  assert.equal(nodes['auto-summary'].style.display, 'none',
+    'Malformed primary data must remain rejected if fallback times out');
+  assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
   archive = [{ time: '2026-11-02T04:45:00Z', status: 'completed', errors: [], experiments: [] }];
   clockMs += 30000;
   await context.loadAuto();
