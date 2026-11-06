@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Measure homepage first, then health and public archive
+      - name: Measure live AETHER health, homepage, and public archive
         shell: bash
         run: |
           set -euo pipefail
