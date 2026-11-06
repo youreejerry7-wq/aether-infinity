@@ -53,7 +53,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Request the homepage first: a prior /health call would wake the free service and hide first-page latency.\n          for endpoint in homepage health archive; do
+          # Request the homepage first: a prior /health call would wake the free service and hide first-page latency.
+          for endpoint in homepage health archive; do
             case "$endpoint" in
               health) url="https://aether-infinity.onrender.com/health" ;;
               homepage) url="https://aether-infinity.onrender.com/" ;;
