@@ -49,11 +49,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Measure live AETHER health, homepage, and public archive
+      - name: Measure homepage first, then health and public archive
         shell: bash
         run: |
           set -euo pipefail
-          for endpoint in health homepage archive; do
+          # Request the homepage first: a prior /health call would wake the free service and hide first-page latency.\n          for endpoint in homepage health archive; do
             case "$endpoint" in
               health) url="https://aether-infinity.onrender.com/health" ;;
               homepage) url="https://aether-infinity.onrender.com/" ;;
