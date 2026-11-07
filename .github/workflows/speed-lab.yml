@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'speed_lab.py'
-      - 'tests/test_speed_lab.py'
+      - 'tests/test_speed_lab*.py'
       - '.github/workflows/speed-lab.yml'
   workflow_dispatch:
 
@@ -20,8 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test variance reduction methods
-        run: python -m unittest discover -s tests -p 'test_speed_lab.py' -v
+      - name: Test variance reduction methods and independent references
+        run: python -m unittest discover -s tests -p 'test_speed_lab*.py' -v
       - name: Show reproducible benchmark
         run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
 
