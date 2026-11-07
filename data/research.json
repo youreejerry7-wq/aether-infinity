@@ -1,5 +1,43 @@
 [
   {
+    "time": "2026-11-07T10:53:32.676637+00:00",
+    "experiments": [
+      {
+        "name": "Fair coin frequency",
+        "observed": 0.50012,
+        "expected": 0.5,
+        "z_score": 0.076,
+        "trials": 100000,
+        "flag": false
+      },
+      {
+        "name": "Uniform threshold frequency",
+        "observed": 0.25047,
+        "expected": 0.25,
+        "z_score": 0.343,
+        "trials": 100000,
+        "flag": false
+      },
+      {
+        "name": "Monte Carlo pi estimation",
+        "observed": 3.13576,
+        "expected": 3.141593,
+        "z_score": -1.123,
+        "trials": 100000,
+        "flag": false
+      },
+      {
+        "name": "Rare-event frequency",
+        "observed": 0.0207,
+        "expected": 0.02,
+        "z_score": 2.236,
+        "trials": 200000,
+        "flag": false
+      }
+    ],
+    "interpretation": "Flags indicate deviations worth replication, not discoveries. Multiple-testing corrections and independent validation are required."
+  },
+  {
     "time": "2026-11-07T09:56:43.691379+00:00",
     "experiments": [
       {
@@ -3755,44 +3793,6 @@
         "observed": 0.02035,
         "expected": 0.02,
         "z_score": 1.118,
-        "trials": 200000,
-        "flag": false
-      }
-    ],
-    "interpretation": "Flags indicate deviations worth replication, not discoveries. Multiple-testing corrections and independent validation are required."
-  },
-  {
-    "time": "2026-11-02T15:05:04.366590+00:00",
-    "experiments": [
-      {
-        "name": "Fair coin frequency",
-        "observed": 0.5013,
-        "expected": 0.5,
-        "z_score": 0.822,
-        "trials": 100000,
-        "flag": false
-      },
-      {
-        "name": "Uniform threshold frequency",
-        "observed": 0.2471,
-        "expected": 0.25,
-        "z_score": -2.118,
-        "trials": 100000,
-        "flag": false
-      },
-      {
-        "name": "Monte Carlo pi estimation",
-        "observed": 3.14636,
-        "expected": 3.141593,
-        "z_score": 0.918,
-        "trials": 100000,
-        "flag": false
-      },
-      {
-        "name": "Rare-event frequency",
-        "observed": 0.02008,
-        "expected": 0.02,
-        "z_score": 0.256,
         "trials": 200000,
         "flag": false
       }
