@@ -200,7 +200,8 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     results = {}
     calibration_seconds = 0.0
     # Include calibration calls in the global sampling-unit budget.
-    calibration_units = len(METHODS) * 3 * 1000
+    calibration_units_per_method = 3 * 1000
+    calibration_units = len(METHODS) * calibration_units_per_method
     max_samples = min(100_000, (MAX_TOTAL_SAMPLES - calibration_units) // (len(METHODS) * replicates))
     for method_index, (name, method) in enumerate(METHODS.items()):
         calibration_times = []
@@ -231,6 +232,16 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "sampling_units_per_second": (
                 samples / median_observed if median_observed > 0 else None
             ),
+            "random_draws_per_sampling_unit": 2 if name == "circle_hits" else 1,
+            "integrand_evaluations_per_sampling_unit": 2 if name == "antithetic_1d" else 1,
+            "random_draws_per_second": (
+                samples * (2 if name == "circle_hits" else 1) / median_observed
+                if median_observed > 0 else None
+            ),
+            "integrand_evaluations_per_second": (
+                samples * (2 if name == "antithetic_1d" else 1) / median_observed
+                if median_observed > 0 else None
+            ),
             "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
             "theoretical_standard_error": math.sqrt(unit_variance / samples),
             "median_observed_seconds": median_observed,
@@ -245,8 +256,8 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "Measured trials with separately calibrated sampling-unit counts near "
             "a common wall-time target, not identical elapsed time. Calibration "
             "cost is reported separately and not included in trial durations. "
-            "Method-specific work per unit differs; observed RMSE is seed-specific. "
-            "No quantum, hardware-independent, or universal speed claim."
+            "Method-specific random draws and integrand evaluations per unit are reported; "
+            "observed RMSE is seed-specific. No quantum, hardware-independent, or universal speed claim."
         ),
         "target_seconds_per_replication": budget_seconds,
         "replications": replicates,
@@ -257,6 +268,16 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             calibration_units + replicates * sum(
                 item["sampling_units_per_replication"] for item in results.values()
             )
+        ),
+        "total_random_draws_including_calibration": sum(
+            (calibration_units_per_method + replicates * item["sampling_units_per_replication"])
+            * (2 if name == "circle_hits" else 1)
+            for name, item in results.items()
+        ),
+        "total_integrand_evaluations_including_calibration": sum(
+            (calibration_units_per_method + replicates * item["sampling_units_per_replication"])
+            * (2 if name == "antithetic_1d" else 1)
+            for name, item in results.items()
         ),
         "sampling_unit_budget": MAX_TOTAL_SAMPLES,
         "results": results,
