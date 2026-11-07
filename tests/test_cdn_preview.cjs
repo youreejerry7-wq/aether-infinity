@@ -17,18 +17,21 @@ function archive(name = "known baseline") {
   return [
     {
       time: "2026-11-07T04:00:02.916661+00:00",
-      status: "completed",
-      errors: [],
+      interpretation: "Flags indicate deviations worth replication, not discoveries. Multiple-testing corrections and independent validation are required.",
       experiments: [{
         name,
-        category: "known_baseline",
         observed: 0.5,
         expected: 0.5,
         z_score: 0,
+        trials: 100000,
         flag: false
       }]
     },
-    { time: "2026-11-07T03:00:00Z", status: "completed", errors: [], experiments: [] }
+    {
+      time: "2026-11-07T03:00:00Z",
+      interpretation: "Flags indicate deviations worth replication, not discoveries.",
+      experiments: []
+    }
   ];
 }
 
@@ -100,9 +103,13 @@ function makeHarness(fetchImpl, start = 1000) {
 test("archive validation rejects empty, malformed, and undated data", () => {
   assert.equal(isUsableArchive([]), false);
   assert.equal(isUsableArchive(null), false);
-  assert.equal(isUsableArchive([{ time: "not-a-date", status: "completed", errors: [], experiments: [] }]), false);
-  assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", status: "completed", errors: [], experiments: [] }]), true);
-  assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", status: "completed", errors: [] }]), false);
+  assert.equal(isUsableArchive([{ time: "not-a-date", experiments: [] }]), false);
+  assert.equal(isUsableArchive([{
+    time: "2026-11-07T04:00:00Z",
+    interpretation: "Flags are not discoveries.",
+    experiments: []
+  }]), true);
+  assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", interpretation: "Missing experiments" }]), false);
 });
 
 test("preview uses one stable cached archive URL and renders untrusted text inertly", async () => {
@@ -114,13 +121,13 @@ test("preview uses one stable cached archive URL and renders untrusted text iner
   assert.equal(h.calls[0].url, ARCHIVE_URL);
   assert.equal(h.calls[0].options.cache, "default");
   assert.equal(h.document.nodes.summary.textContent.includes("2 archived cycles"), true);
-  assert.equal(h.document.nodes.status.textContent, "Latest cycle status: completed");
+  assert.equal(h.document.nodes.status.textContent, "Latest archive record loaded");
   assert.equal(h.document.nodes.experiments.children.length, 1);
   assert.equal(
     h.document.nodes.experiments.children[0].children[0].textContent,
     "<img src=x onerror=alert(1)>"
   );
-  assert.equal(h.document.nodes.experiments.children[0].children[1].textContent, "Known baseline");
+  assert.equal(h.document.nodes.experiments.children[0].children[1].textContent, "Simulated statistic");
   assert.match(h.document.nodes.note.textContent, /not discoveries/);
 
   const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
