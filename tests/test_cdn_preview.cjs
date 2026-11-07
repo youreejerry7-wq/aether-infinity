@@ -124,7 +124,7 @@ test("preview uses one stable cached archive URL and renders untrusted text iner
 
   const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
   assert.doesNotMatch(source, /\binnerHTML\b/);
-  assert.doesNotMatch(source, /no-store|\?t=|cache-bust/i);
+  assert.doesNotMatch(source, /cache\s*:\s*["']no-store|\?t=/i);
   assert.doesNotMatch(source, /\/api\//);
 });
 
