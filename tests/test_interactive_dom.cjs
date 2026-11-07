@@ -6,7 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'templates', 'index.html'), 'utf8');
-const scripts = [...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)];
+const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
 assert.ok(scripts.length >= 2, 'Expected separate archive and interactive scripts');
 const demoScript = scripts[scripts.length - 1][1];
 
