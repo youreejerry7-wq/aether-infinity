@@ -35,14 +35,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Reject research archive changes in this review PR
+      - name: Reject research archive content that differs from the current base branch
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet "origin/${{ github.base_ref }}...HEAD" -- data/research.json; then
+          if git diff --quiet "origin/${{ github.base_ref }}" HEAD -- data/research.json; then
             echo "PASS: PR does not alter the scheduled research archive."
           else
-            echo "::error::PR changes data/research.json. Sync the latest main archive and remove this file from the proposed release before owner review."
+            echo "::error::PR archive content differs from the current base branch. Sync the latest main archive before owner review."
             exit 1
           fi
   smoke-live:
