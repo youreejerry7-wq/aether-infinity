@@ -30,3 +30,22 @@ jobs:
           assert "python research.py" in workflow, "research execution missing"
           print("PASS: six research release-policy checks")
           PY
+  smoke-existing-aether:
+    # Read-only checks of current production; these do not validate or deploy PR code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Measure live health and homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+          metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 1000000 -o "$RUNNER_TEMP/health.json" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' https://aether-infinity.onrender.com/health)
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "AETHER GET /health: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = 200
+          python -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$RUNNER_TEMP/health.json"
+          metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 1000000 -o "$RUNNER_TEMP/home.html" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' https://aether-infinity.onrender.com/)
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "AETHER GET /: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = 200
+          grep -qi 'AETHER' "$RUNNER_TEMP/home.html"
