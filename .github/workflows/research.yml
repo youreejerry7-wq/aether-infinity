@@ -25,6 +25,8 @@ jobs:
         run: pytest
       - name: Execute scheduled research cycle
         run: python research.py
+      - name: Validate generated research archive before committing
+        run: python -m unittest discover -s tests -p 'test_research_archive.py' -v
       - name: Commit results if changed
         run: |
           git config user.name "github-actions[bot]"
