@@ -143,7 +143,7 @@
         void refresh(true);
       });
       doc.addEventListener("visibilitychange", function () {
-        if (!doc.hidden) void refresh(false);
+        if (!doc.hidden) return refresh(false);
       });
     }
 
