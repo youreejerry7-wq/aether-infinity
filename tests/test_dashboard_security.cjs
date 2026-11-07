@@ -155,6 +155,27 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes['auto-interpretation'].textContent, '', 'Missing interpretation clears stale text');
   assert.equal(nodes['auto-errors'].children.length, 0, 'Resolved errors are not retained');
 
+  // The existing public archive predates status/errors/category fields.
+  // It must still render honestly rather than being rejected as unavailable.
+  archive = [{
+    time: '2026-11-07T11:49:55.113749+00:00',
+    interpretation: 'Flags indicate deviations worth replication, not discoveries.',
+    experiments: [{
+      name: 'Fair coin frequency', observed: 0.49936, expected: 0.5,
+      z_score: -0.405, trials: 100000, flag: false,
+    }],
+  }];
+  clockMs += 300000;
+  await context.loadAuto();
+  const legacyBadge = nodes['val-status'].children[0];
+  assert.equal(legacyBadge.textContent, 'legacy record');
+  assert.equal(legacyBadge.className, 'status-badge',
+    'Legacy status must use a neutral badge, not the failed state');
+  assert.equal(nodes['auto-experiments'].children[0].children[1].textContent,
+    'Simulated statistic');
+  assert.equal(nodes['auto-errors'].children.length, 0,
+    'Missing legacy errors must not be treated as a validation failure');
+
   // Oversized archives must not create unbounded DOM rows or hide truncation.
   archive = [{
     time: '2026-11-02T04:30:00Z', status: 'partial_failure',
