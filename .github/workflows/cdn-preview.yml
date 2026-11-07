@@ -29,7 +29,7 @@ jobs:
             --output "$RUNNER_TEMP/research.json" \
             --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\n' \
             "$archive_url"
-          grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
+          grep -Eiq '^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
           python - "$RUNNER_TEMP/research.json" <<'PY'
           import json
           import sys
