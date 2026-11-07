@@ -416,5 +416,37 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.run.disabled, false);
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
 
+  // Optional live integration check: feed the public archive through the same
+  // dashboard loader used by the browser, not just a hand-written fixture.
+  if (process.env.AETHER_ARCHIVE_PATH) {
+    const liveArchive = JSON.parse(fs.readFileSync(process.env.AETHER_ARCHIVE_PATH, 'utf8'));
+    assert.ok(Array.isArray(liveArchive) && liveArchive.length > 0);
+    assert.ok(Array.isArray(liveArchive[0].experiments));
+    archive = liveArchive;
+    failArchive = false;
+    fallbackArchive = null;
+    hangGitHub = false;
+    hangFallback = false;
+    hangArchiveBody = false;
+    document.hidden = false;
+    clockMs = Number.MAX_SAFE_INTEGER - 1000000;
+    await context.loadAuto();
+    assert.equal(nodes['auto-summary'].style.display, 'grid',
+      'The current public archive must be accepted by the dashboard');
+    const liveBadge = nodes['val-status'].children[0];
+    assert.equal(liveBadge.textContent,
+      typeof liveArchive[0].status === 'string' ? liveArchive[0].status : 'legacy record');
+    if (liveArchive[0].experiments.length > 0) {
+      const first = liveArchive[0].experiments[0];
+      const expectedType = first && first.category === 'known_baseline' ? 'Known baseline' :
+        first && typeof first.category === 'string' ? 'Unverified candidate' : 'Simulated statistic';
+      assert.equal(nodes['auto-experiments'].children[0].children[1].textContent, expectedType);
+    }
+    if (!Array.isArray(liveArchive[0].errors)) {
+      assert.equal(nodes['auto-errors'].children.length, 0);
+    }
+    console.log('Live archive/dashboard integration PASS: ' + liveArchive.length + ' cycles.');
+  }
+
   console.log('Dashboard DOM security PASS: inert text, bounded requests, stale-response guard, nonblocking run feedback.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
