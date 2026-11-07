@@ -12,7 +12,7 @@ const start = scripts[scripts.length - 1][1].indexOf('async function fetchIntera
 assert.ok(start >= 0, 'Expected the bounded interactive request helper');
 const end = scripts[scripts.length - 1][1].indexOf('\nloadAuto();', start);
 assert.ok(end > start, 'Expected the dashboard startup section after interactive controller');
-const demoScript = scripts[scripts.length - 1][1].slice(start, end) + '\nloadInteractive();';
+const demoScript = scripts[scripts.length - 1][1].slice(start, end);
 
 function element(tag) {
   return {
@@ -81,6 +81,9 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
 
 (async () => {
   vm.runInNewContext(demoScript, context);
+  assert.equal(typeof context.fetchInteractiveJsonWithTimeout, 'function', 'Expected bounded request helper');
+  assert.equal(typeof context.loadInteractive, 'function', 'Expected interactive results loader');
+  await context.loadInteractive();
   await settle();
 
   assert.equal(getCalls, 1, 'Interactive results should load on startup');
