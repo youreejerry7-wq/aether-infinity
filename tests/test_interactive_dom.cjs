@@ -120,7 +120,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
     estimate: 3.14, expected: Math.PI, deviation: 0.00159, status: 'completed',
   }];
   await context.loadInteractive();
-  assert.equal(nodes.results.children[0].children[0].children[0].textContent,
+  assert.equal(nodes.results.children[0].children[0].textContent,
     '2026-11-07 06:00:00', 'Valid rows should recover after a failed refresh');
 
   postMode = 'malformed';
