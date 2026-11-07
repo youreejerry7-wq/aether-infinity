@@ -276,5 +276,18 @@ class SpeedLabTests(unittest.TestCase):
         self.assertEqual(events[:12], ["rng", "clock", "method", "clock"] * 3)
 
 
+    def test_antithetic_variance_quadrature_runs_once_per_report(self):
+        from unittest.mock import patch
+        import speed_lab
+
+        with patch.object(speed_lab, "antithetic_unit_variance_midpoint", return_value=0.109) as estimate:
+            benchmark(samples=100, replicates=2, seed=11)
+            estimate.assert_called_once_with()
+
+        with patch.object(speed_lab, "antithetic_unit_variance_midpoint", return_value=0.109) as estimate:
+            benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=11)
+            estimate.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()
