@@ -19,3 +19,13 @@ jobs:
           node-version: '22'
       - name: Reject untrusted HTML rendering in dashboard
         run: node tests/test_dashboard_security.cjs
+      - name: Verify the current public archive with the dashboard renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 12 --max-time 60 --max-filesize 2000000 \
+            --output "$RUNNER_TEMP/research.json" \
+            --write-out 'Public archive HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\\n' \
+            https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json
+          AETHER_ARCHIVE_PATH="$RUNNER_TEMP/research.json" node tests/test_dashboard_security.cjs
