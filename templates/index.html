@@ -132,8 +132,9 @@ function isUsableArchive(data) {
   const latest = Array.isArray(data) ? data[0] : null;
   return Boolean(latest && typeof latest === 'object' && !Array.isArray(latest) &&
     typeof latest.time === 'string' && !Number.isNaN(Date.parse(latest.time)) &&
-    typeof latest.status === 'string' && Array.isArray(latest.experiments) &&
-    Array.isArray(latest.errors));
+    Array.isArray(latest.experiments) &&
+    (latest.status === undefined || typeof latest.status === 'string') &&
+    (latest.errors === undefined || Array.isArray(latest.errors)));
 }
 let nextArchiveRequestAt = -Infinity;
 let archiveUpdating = false;
@@ -199,8 +200,11 @@ async function loadAuto() {
   const statusNode = document.getElementById('val-status');
   statusNode.textContent = '';
   const badge = document.createElement('span');
-  badge.className = 'status-badge ' + (latest.status === 'completed' ? 'status-completed' : 'status-failed');
-  badge.textContent = String(latest.status || 'unknown');
+  const cycleStatus = typeof latest.status === 'string' ? latest.status : 'legacy record';
+  badge.className = 'status-badge' +
+    (cycleStatus === 'completed' ? ' status-completed' :
+      (cycleStatus === 'failed' || cycleStatus === 'partial_failure' ? ' status-failed' : ''));
+  badge.textContent = cycleStatus;
   statusNode.appendChild(badge);
   document.getElementById('val-cycles').textContent = data.length;
   document.getElementById('val-threshold').textContent = '|z| > ' + (latest.z_threshold || 3.29);
@@ -237,7 +241,8 @@ async function loadAuto() {
       const row = document.createElement('tr');
       const values = [
         String(exp && exp.name || 'Unnamed experiment'),
-        exp && exp.category === 'known_baseline' ? 'Known baseline' : 'Unverified candidate',
+        exp && exp.category === 'known_baseline' ? 'Known baseline' :
+          exp && typeof exp.category === 'string' ? 'Unverified candidate' : 'Simulated statistic',
         String(exp && exp.observed != null ? exp.observed : ''),
         String(exp && exp.expected != null ? exp.expected : ''),
         String(exp && exp.z_score != null ? exp.z_score : ''),
