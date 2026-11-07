@@ -164,6 +164,27 @@ test("failed archive reads show a generic message and retry after a bounded dela
   assert.equal(h.calls.length, 2);
 });
 
+test("a failed refresh clears previously rendered archive data", async () => {
+  let fail = false;
+  const h = makeHarness(async () => {
+    if (fail) throw new Error("private transport detail");
+    return { ok: true, json: async () => archive("last good cycle") };
+  });
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(h.document.nodes.experiments.children.length, 1);
+  assert.match(h.document.nodes.summary.textContent, /archived cycles/);
+
+  fail = true;
+  h.advance(REFRESH_MS);
+  assert.equal(await h.controller.refresh(false), false);
+  assert.equal(h.document.nodes.summary.textContent, "");
+  assert.equal(h.document.nodes.experiments.children.length, 0);
+  assert.match(h.document.nodes.status.textContent, /temporarily unavailable/);
+  assert.match(h.document.nodes.note.textContent, /No current archive data is displayed/);
+  assert.doesNotMatch(h.document.nodes.status.textContent, /private transport detail/);
+});
+
 test("hidden tabs do not fetch; visibility can resume a due refresh", async () => {
   const h = makeHarness(async () => ({ ok: true, json: async () => archive() }));
   h.document.hidden = true;
