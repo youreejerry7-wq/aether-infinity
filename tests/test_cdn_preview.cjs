@@ -6,6 +6,7 @@ const test = require("node:test");
 const {
   ARCHIVE_URL,
   MAX_EXPERIMENTS,
+  REQUEST_TIMEOUT_MS,
   REFRESH_MS,
   RETRY_MS,
   createController,
@@ -189,4 +190,52 @@ test("rendering is bounded even if a cycle contains many experiment rows", async
   await h.controller.refresh(false);
   assert.equal(h.document.nodes.experiments.children.length, MAX_EXPERIMENTS);
   assert.match(h.document.nodes.note.textContent, /Showing 50 of 60/);
+});
+
+test("a stalled archive request is aborted after the timeout", async () => {
+  const document = makeDocument();
+  const timers = [];
+  let rejectFetch;
+  let signal;
+  let abortCalled = false;
+
+  const controller = createController({
+    document,
+    fetchImpl: (_url, options) => {
+      signal = options.signal;
+      return new Promise((_resolve, reject) => {
+        rejectFetch = reject;
+      });
+    },
+    now: () => 1000,
+    setTimeoutImpl: (callback, delay) => {
+      const id = timers.length + 1;
+      timers.push({ id, callback, delay });
+      return id;
+    },
+    clearTimeoutImpl: () => {},
+    AbortControllerImpl: class {
+      constructor() {
+        this.signal = { aborted: false };
+      }
+      abort() {
+        abortCalled = true;
+        this.signal.aborted = true;
+        if (rejectFetch) rejectFetch(new Error("aborted"));
+      }
+    }
+  });
+
+  const pending = controller.refresh(false);
+  await Promise.resolve();
+  const timeout = timers.find((timer) => timer.delay === REQUEST_TIMEOUT_MS);
+  assert.ok(timeout, "request timeout should be scheduled");
+  assert.equal(signal.aborted, false);
+
+  timeout.callback();
+  assert.equal(await pending, false);
+  assert.equal(abortCalled, true);
+  assert.equal(signal.aborted, true);
+  assert.match(document.nodes.status.textContent, /temporarily unavailable/);
+  assert.ok(timers.some((timer) => timer.delay === RETRY_MS));
 });
