@@ -1,0 +1,32 @@
+name: AETHER speed lab tests
+
+on:
+  pull_request:
+    paths:
+      - 'speed_lab.py'
+      - 'tests/test_speed_lab*.py'
+      - '.github/workflows/speed-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test variance reduction methods and independent references
+        run: python -m unittest discover -s tests -p 'test_speed_lab*.py' -v
+      - name: Show reproducible benchmark
+        run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
+
+      # 0.02 s capped all methods at 82,958 units on a 2026-11-02 runner,
+      # making the nominal matched-time comparison an equal-units comparison.
+      # A smaller target leaves room for method-specific calibration within budget.
+      - name: Show measured matched-time trials (bounded)
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 8 --seed 2026
