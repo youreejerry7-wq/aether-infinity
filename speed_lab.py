@@ -206,8 +206,10 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     for method_index, (name, method) in enumerate(METHODS.items()):
         calibration_times = []
         for i in range(3):
+            # Match trial timing: RNG construction is outside the timed interval.
+            rng = random.Random(seed + method_index * 1009 + i)
             start = time.perf_counter()
-            method(1000, random.Random(seed + method_index * 1009 + i))
+            method(1000, rng)
             calibration_times.append(time.perf_counter() - start)
         calibration_seconds += sum(calibration_times)
         calibration_median = statistics.median(calibration_times)

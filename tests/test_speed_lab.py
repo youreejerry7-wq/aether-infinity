@@ -239,5 +239,42 @@ class SpeedLabTests(unittest.TestCase):
         self.assertEqual(before.exists(), was_present)
 
 
+    def test_matched_time_calibration_excludes_rng_setup(self):
+        """Calibration and measured trials time the estimator, not RNG setup."""
+        from unittest.mock import patch
+        import speed_lab
+
+        events = []
+        ticks = iter(range(1000))
+
+        def fake_clock():
+            events.append("clock")
+            return next(ticks) * 0.001
+
+        class TrackingRandom:
+            def __init__(self, seed):
+                events.append("rng")
+
+        def stub_method(samples, rng):
+            events.append("method")
+            return math.pi
+
+        methods = {
+            "circle_hits": stub_method,
+            "conditional_1d": stub_method,
+            "antithetic_1d": stub_method,
+        }
+        with patch.object(speed_lab, "METHODS", methods), \
+             patch.object(speed_lab.time, "perf_counter", side_effect=fake_clock), \
+             patch.object(speed_lab.random, "Random", TrackingRandom):
+            speed_lab.benchmark_matched_time(
+                budget_seconds=0.005, replicates=2, seed=1
+            )
+
+        # Three calibration calls per method; each RNG must be created
+        # before the timer starts, just as it is for measured trials.
+        self.assertEqual(events[:12], ["rng", "clock", "method", "clock"] * 3)
+
+
 if __name__ == "__main__":
     unittest.main()
