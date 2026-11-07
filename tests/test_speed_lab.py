@@ -150,6 +150,30 @@ class SpeedLabTests(unittest.TestCase):
                                      metrics["max_observed_seconds"])
                 self.assertTrue(math.isfinite(metrics["rmse"]))
                 self.assertGreater(metrics["theoretical_standard_error"], 0)
+                expected_draws = 2 if name == "circle_hits" else 1
+                expected_evaluations = 2 if name == "antithetic_1d" else 1
+                self.assertEqual(metrics["random_draws_per_sampling_unit"], expected_draws)
+                self.assertEqual(metrics["integrand_evaluations_per_sampling_unit"], expected_evaluations)
+                self.assertAlmostEqual(
+                    metrics["random_draws_per_second"] * metrics["median_observed_seconds"],
+                    n * expected_draws, places=6,
+                )
+                self.assertAlmostEqual(
+                    metrics["integrand_evaluations_per_second"] * metrics["median_observed_seconds"],
+                    n * expected_evaluations, places=6,
+                )
+        expected_random_draws = sum(
+            (3_000 + data["replications"] * item["sampling_units_per_replication"])
+            * (2 if name == "circle_hits" else 1)
+            for name, item in data["results"].items()
+        )
+        expected_integrand_evaluations = sum(
+            (3_000 + data["replications"] * item["sampling_units_per_replication"])
+            * (2 if name == "antithetic_1d" else 1)
+            for name, item in data["results"].items()
+        )
+        self.assertEqual(data["total_random_draws_including_calibration"], expected_random_draws)
+        self.assertEqual(data["total_integrand_evaluations_including_calibration"], expected_integrand_evaluations)
         self.assertLessEqual(total_units, MAX_TOTAL_SAMPLES)
         self.assertEqual(data["calibration_sampling_units"], 9_000)
         self.assertEqual(data["total_sampling_units_including_calibration"],
