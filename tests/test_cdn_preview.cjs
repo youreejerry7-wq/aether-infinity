@@ -281,3 +281,21 @@ test("initial HTML stays lightweight and avoids third-party render-blocking asse
   assert.doesNotMatch(html, /<iframe\b|<img\b/i);
   assert.doesNotMatch(html, /@import\s+url|url\(\s*["']?https?:/i);
 });
+
+
+test("static preview transfer budget and external data dependency stay bounded", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../cdn-preview/index.html"));
+  const script = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"));
+  const htmlBytes = html.byteLength;
+  const scriptBytes = script.byteLength;
+  const totalBytes = htmlBytes + scriptBytes;
+
+  // Raw source bytes are a reproducible upper bound before HTTP compression.
+  assert.ok(scriptBytes <= 8 * 1024, `app.js is ${scriptBytes} bytes; budget is 8192`);
+  assert.ok(totalBytes <= 12 * 1024, `HTML + JS are ${totalBytes} bytes; budget is 12288`);
+
+  const source = script.toString("utf8");
+  const absoluteUrls = [...source.matchAll(/https?:\\/\\/[^"'\\s]+/g)].map((match) => match[0]);
+  assert.deepEqual(absoluteUrls, [ARCHIVE_URL], "the archive must remain the only external data URL");
+  assert.equal((source.match(/fetchImpl\\(ARCHIVE_URL/g) || []).length, 1);
+});
