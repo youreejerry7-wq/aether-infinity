@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A lightweight, read-only AETHER research archive preview.">
+  <title>AETHER ∞ — Archive Preview</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0a101d; color: #edf3ff; }
+    body { margin: 0; padding: 28px 16px; }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: clamp(2rem, 7vw, 3.5rem); }
+    p, small { color: #b6c4d8; line-height: 1.5; }
+    a { color: #8ee0d0; }
+    section { margin-top: 22px; padding: 20px; border: 1px solid #34445c; border-radius: 14px; background: #151f32; }
+    button { border: 0; border-radius: 8px; padding: 11px 16px; background: #8ee0d0; color: #06131a; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: wait; }
+    .status { min-height: 1.5em; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { padding: 10px 7px; border-bottom: 1px solid #34445c; text-align: left; }
+    th { color: #9fb0c6; }
+    footer { margin-top: 18px; }
+  </style>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>AETHER ∞</h1>
+      <p>Read-only research archive · lightweight static preview</p>
+      <p>This page reads the public GitHub archive directly. It does not call or wake the Flask API.</p>
+    </header>
+
+    <section aria-labelledby="archive-title">
+      <h2 id="archive-title">Latest archived cycle</h2>
+      <button id="refresh" type="button">Refresh archive</button>
+      <p id="status" class="status" role="status" aria-live="polite">Loading archive…</p>
+      <p id="summary"></p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Experiment</th>
+              <th>Evidence type</th>
+              <th>Observed</th>
+              <th>Expected</th>
+              <th>z-score</th>
+              <th>Flag</th>
+            </tr>
+          </thead>
+          <tbody id="experiments"></tbody>
+        </table>
+      </div>
+      <small id="note">Archive records are simulated statistics. A flag is not a discovery.</small>
+    </section>
+
+    <footer>
+      <small>
+        This is an isolated staging frontend, not a replacement for the interactive application.
+        <a href="https://aether-infinity.onrender.com/">Open the interactive Flask lab</a>
+        (the free web service may need to wake).
+      </small>
+    </footer>
+  </main>
+</body>
+</html>
