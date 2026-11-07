@@ -16,7 +16,7 @@ This directory is an isolated, static-only frontend experiment intended to measu
 After this pull request is reviewed, a separate free Render Static Site can be evaluated with:
 
 - Repository: `youreejerry7-wq/aether-infinity`
-- Branch: the reviewed branch or a later reviewed `main)
+- Branch: the reviewed branch for an isolated preview, or a later reviewed `main` after approval
 - Build command: `echo "No build step required"`
 - Publish directory: `cdn-preview`
 
