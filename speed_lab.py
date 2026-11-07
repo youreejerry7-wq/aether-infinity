@@ -99,6 +99,12 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
     if samples * replicates * len(METHODS) > MAX_TOTAL_SAMPLES:
         raise ValueError(f"total sampling units across all methods must not exceed {MAX_TOTAL_SAMPLES:,}")
 
+    # Compute deterministic quadrature once per report, not once per method.
+    unit_variances = {
+        "circle_hits": 4 * math.pi - math.pi ** 2,
+        "conditional_1d": 32 / 3 - math.pi ** 2,
+        "antithetic_1d": antithetic_unit_variance_midpoint(),
+    }
     results = {}
     for name, method in METHODS.items():
         estimates = []
@@ -114,11 +120,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         errors = [estimate - math.pi for estimate in estimates]
         # All replications average independent sampling units. The antithetic
         # unit is a correlated pair, whose variance is integrated numerically.
-        unit_variance = {
-            "circle_hits": 4 * math.pi - math.pi ** 2,
-            "conditional_1d": 32 / 3 - math.pi ** 2,
-            "antithetic_1d": antithetic_unit_variance_midpoint(),
-        }[name]
+        unit_variance = unit_variances[name]
         rmse = math.sqrt(statistics.mean(error * error for error in errors))
         median_time = statistics.median(durations)
         results[name] = {
@@ -197,6 +199,12 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("seed must be an integer")
 
+    # Reuse the same one-time deterministic variance calculation across methods.
+    unit_variances = {
+        "circle_hits": 4 * math.pi - math.pi ** 2,
+        "conditional_1d": 32 / 3 - math.pi ** 2,
+        "antithetic_1d": antithetic_unit_variance_midpoint(),
+    }
     results = {}
     calibration_seconds = 0.0
     # Include calibration calls in the global sampling-unit budget.
@@ -223,11 +231,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             estimate = method(samples, rng)
             durations.append(time.perf_counter() - start)
             errors.append(estimate - math.pi)
-        unit_variance = {
-            "circle_hits": 4 * math.pi - math.pi ** 2,
-            "conditional_1d": 32 / 3 - math.pi ** 2,
-            "antithetic_1d": antithetic_unit_variance_midpoint(),
-        }[name]
+        unit_variance = unit_variances[name]
         median_observed = statistics.median(durations)
         results[name] = {
             "sampling_units_per_replication": samples,
