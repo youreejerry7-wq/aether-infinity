@@ -127,6 +127,11 @@
         schedule(REFRESH_MS);
         return true;
       } catch (_) {
+        // Do not leave an older cycle looking current after a failed refresh.
+        doc.getElementById("summary").textContent = "";
+        doc.getElementById("experiments").replaceChildren();
+        doc.getElementById("note").textContent =
+          "No current archive data is displayed. Statistical flags are prompts for replication, not discoveries.";
         setStatus("Archive temporarily unavailable. The Flask API was not contacted.");
         nextAllowedAt = now() + RETRY_MS;
         schedule(RETRY_MS);
