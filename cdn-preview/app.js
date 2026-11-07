@@ -17,9 +17,7 @@
       !Array.isArray(latest) &&
       typeof latest.time === "string" &&
       !Number.isNaN(Date.parse(latest.time)) &&
-      typeof latest.status === "string" &&
-      Array.isArray(latest.experiments) &&
-      Array.isArray(latest.errors)
+      Array.isArray(latest.experiments)
     );
   }
 
@@ -56,7 +54,7 @@
 
       summary.textContent =
         data.length + " archived cycles · latest: " + timestamp;
-      setStatus("Latest cycle status: " + latest.status);
+      setStatus("Latest archive record loaded");
       body.replaceChildren();
 
       const experiments = latest.experiments.slice(0, MAX_EXPERIMENTS);
@@ -66,7 +64,9 @@
           String(experiment && experiment.name || "Unnamed experiment"),
           experiment && experiment.category === "known_baseline"
             ? "Known baseline"
-            : "Unverified candidate",
+            : experiment && experiment.category === "candidate"
+              ? "Unverified candidate"
+              : "Simulated statistic",
           String(experiment && experiment.observed != null ? experiment.observed : ""),
           String(experiment && experiment.expected != null ? experiment.expected : ""),
           String(experiment && experiment.z_score != null ? experiment.z_score : ""),
@@ -89,11 +89,18 @@
       }
 
       const truncated = latest.experiments.length > MAX_EXPERIMENTS;
-      const errorCount = latest.errors.length;
+      const errorSummary = Array.isArray(latest.errors)
+        ? latest.errors.length + " recorded cycle errors. "
+        : "Cycle-level error details are not included in this archive. ";
+      const interpretation = typeof latest.interpretation === "string"
+        ? latest.interpretation + " "
+        : "";
+      const caution = /not discoveries/i.test(interpretation)
+        ? ""
+        : "Statistical flags are prompts for replication, not discoveries.";
       note.textContent =
         (truncated ? "Showing " + MAX_EXPERIMENTS + " of " + latest.experiments.length + " experiments. " : "") +
-        errorCount + " recorded cycle errors. " +
-        "Statistical flags are prompts for replication, not discoveries.";
+        errorSummary + interpretation + caution;
     }
 
     async function refresh(force) {
