@@ -1,0 +1,43 @@
+name: AETHER CDN preview checks
+on:
+  pull_request:
+    paths:
+      - 'cdn-preview/**'
+      - 'tests/test_cdn_preview.cjs'
+      - '.github/workflows/cdn-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test cache, throttling, visibility, bounds, and safe rendering
+        run: node --test tests/test_cdn_preview.cjs
+      - name: Verify the public archive supports browser cross-origin reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json"
+          curl --fail --silent --show-error --location \
+            --dump-header "$RUNNER_TEMP/archive.headers" \
+            --output "$RUNNER_TEMP/research.json" \
+            --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\n' \
+            "$archive_url"
+          grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
+          python - "$RUNNER_TEMP/research.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              archive = json.load(handle)
+          assert isinstance(archive, list) and archive, "archive must be a nonempty list"
+          latest = archive[0]
+          assert isinstance(latest, dict), "latest cycle must be an object"
+          assert isinstance(latest.get("experiments"), list), "latest experiments must be a list"
+          print(f"Archive JSON valid: {len(archive)} cycles; latest timestamp present={bool(latest.get('time'))}")
+          PY
