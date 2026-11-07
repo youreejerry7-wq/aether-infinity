@@ -295,7 +295,7 @@ test("static preview transfer budget and external data dependency stay bounded",
   assert.ok(totalBytes <= 12 * 1024, `HTML + JS are ${totalBytes} bytes; budget is 12288`);
 
   const source = script.toString("utf8");
-  const absoluteUrls = [...source.matchAll(/https?:\\/\\/[^"'\\s]+/g)].map((match) => match[0]);
+  const absoluteUrls = [...source.matchAll(/https?:\/\/[^"'\s]+/g)].map((match) => match[0]);
   assert.deepEqual(absoluteUrls, [ARCHIVE_URL], "the archive must remain the only external data URL");
-  assert.equal((source.match(/fetchImpl\\(ARCHIVE_URL/g) || []).length, 1);
+  assert.equal(source.split("fetchImpl(ARCHIVE_URL").length - 1, 1);
 });
