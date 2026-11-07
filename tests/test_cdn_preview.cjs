@@ -277,7 +277,11 @@ test("initial HTML stays lightweight and avoids third-party render-blocking asse
   assert.ok(Buffer.byteLength(html, "utf8") <= 4096, "initial HTML must stay under 4 KiB");
   assert.match(html, /<script\s+src=["']\.\/app\.js["']\s+defer\s*>\s*<\/script>/i);
   assert.doesNotMatch(html, /<script\b[^>]*\bsrc=["']https?:\/\//i);
-  assert.doesNotMatch(html, /<link\b[^>]*\bhref=["']https?:\/\//i);
+  const externalLinks = [...html.matchAll(/<link\b[^>]*\bhref=[\"']https?:\/\//gi)].map((match) => match[0]);
+  assert.equal(externalLinks.length, 1, "only the archive host may be preconnected");
+  assert.ok(externalLinks[0].includes('rel="preconnect"'));
+  assert.ok(externalLinks[0].includes('href="https://raw.githubusercontent.com"'));
+  assert.ok(externalLinks[0].includes("crossorigin"));
   assert.doesNotMatch(html, /<iframe\b|<img\b/i);
   assert.doesNotMatch(html, /@import\s+url|url\(\s*["']?https?:/i);
 });
