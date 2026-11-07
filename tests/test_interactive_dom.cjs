@@ -7,8 +7,12 @@ const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'templates', 'index.html'), 'utf8');
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-assert.ok(scripts.length >= 2, 'Expected separate archive and interactive scripts');
-const demoScript = scripts[scripts.length - 1][1];
+assert.ok(scripts.length >= 1, 'Expected the dashboard script');
+const start = scripts[scripts.length - 1][1].indexOf('let interactiveRequestSeq = 0;');
+assert.ok(start >= 0, 'Expected the interactive results controller');
+const end = scripts[scripts.length - 1][1].indexOf('\nloadAuto();', start);
+assert.ok(end > start, 'Expected the dashboard startup section after interactive controller');
+const demoScript = scripts[scripts.length - 1][1].slice(start, end) + '\nloadInteractive();';
 
 function element(tag) {
   return {
