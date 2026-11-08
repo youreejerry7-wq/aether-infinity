@@ -29,6 +29,9 @@ jobs:
             --output "$RUNNER_TEMP/research.json" \
             --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\n' \
             "$archive_url"
+          # The frontend uses cache: "default"; require a positive origin cache lifetime.
+          grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/archive.headers"
+          grep -Ei '^cache-control:|^etag:' "$RUNNER_TEMP/archive.headers"
           grep -Eiq '^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
           python - "$RUNNER_TEMP/research.json" <<'PY'
           import json
