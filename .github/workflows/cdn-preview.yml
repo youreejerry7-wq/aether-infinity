@@ -4,6 +4,7 @@ on:
     paths:
       - 'cdn-preview/**'
       - 'tests/test_cdn_preview.cjs'
+      - 'data/research.json'
       - '.github/workflows/cdn-preview.yml'
   workflow_dispatch:
 permissions:
@@ -17,6 +18,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      - name: Reject changes to the scheduled research archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_ref="${GITHUB_BASE_REF:-main}"
+          if git diff --quiet "origin/${base_ref}" HEAD -- data/research.json; then
+            echo "PASS: PR does not alter the scheduled research archive."
+          else
+            echo "::error::PR archive content differs from the current base branch. Sync the latest main archive before review."
+            exit 1
+          fi
       - name: Test cache, throttling, visibility, bounds, and safe rendering
         run: node --test tests/test_cdn_preview.cjs
       - name: Verify the public archive supports browser cross-origin reads
