@@ -223,26 +223,61 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     calibration_units_per_method = 3 * 1000
     calibration_units = len(METHODS) * calibration_units_per_method
     max_samples = min(100_000, (MAX_TOTAL_SAMPLES - calibration_units) // (len(METHODS) * replicates))
-    for method_index, (name, method) in enumerate(METHODS.items()):
-        calibration_times = []
-        for i in range(3):
-            # Match trial timing: RNG construction is outside the timed interval.
-            rng = random.Random(seed + method_index * 1009 + i)
-            start = time.perf_counter()
-            method(1000, rng)
-            calibration_times.append(time.perf_counter() - start)
-        calibration_seconds += sum(calibration_times)
+    method_names = list(METHODS)
+    method_indices = {name: index for index, name in enumerate(method_names)}
+
+    # Shuffle calibration calls across methods so one method is not always
+    # calibrated first under a different warm-up or background-load state.
+    calibration_times_by_method = {name: [] for name in method_names}
+    calibration_order = [
+        (name, trial)
+        for name in method_names
+        for trial in range(3)
+    ]
+    calibration_order_rng = random.Random(seed ^ 0xCA1B4A7E)
+    calibration_order_rng.shuffle(calibration_order)
+    for name, trial in calibration_order:
+        method_index = method_indices[name]
+        rng = random.Random(seed + method_index * 1009 + trial)
+        start = time.perf_counter()
+        METHODS[name](1000, rng)
+        calibration_times_by_method[name].append(time.perf_counter() - start)
+    calibration_seconds = sum(
+        sum(times) for times in calibration_times_by_method.values()
+    )
+
+    samples_by_method = {}
+    for name, calibration_times in calibration_times_by_method.items():
         calibration_median = statistics.median(calibration_times)
-        samples = min(max_samples, max(100, round(1000 * budget_seconds / calibration_median)))
-        errors = []
-        durations = []
-        for i in range(replicates):
-            # Distinct seeded trials; never reuse calibration generators.
-            rng = random.Random(seed + 1_000_003 * (i + 1) + 9973 * method_index)
-            start = time.perf_counter()
-            estimate = method(samples, rng)
-            durations.append(time.perf_counter() - start)
-            errors.append(estimate - math.pi)
+        samples_by_method[name] = min(
+            max_samples,
+            max(100, round(1000 * budget_seconds / calibration_median)),
+        )
+
+    # Interleave measured trials with a deterministic shuffled schedule.
+    # Each method retains its own deterministic RNG seed for each replicate.
+    trial_data = {name: {"errors": [], "durations": []} for name in method_names}
+    trial_order = [
+        (name, trial)
+        for name in method_names
+        for trial in range(replicates)
+    ]
+    trial_order_rng = random.Random(seed ^ 0x5EED5EED)
+    trial_order_rng.shuffle(trial_order)
+    for name, trial in trial_order:
+        method_index = method_indices[name]
+        samples = samples_by_method[name]
+        rng = random.Random(seed + 1_000_003 * (trial + 1) + 9973 * method_index)
+        start = time.perf_counter()
+        estimate = METHODS[name](samples, rng)
+        elapsed = time.perf_counter() - start
+        trial_data[name]["durations"].append(elapsed)
+        trial_data[name]["errors"].append(estimate - math.pi)
+
+    for name in method_names:
+        samples = samples_by_method[name]
+        errors = trial_data[name]["errors"]
+        durations = trial_data[name]["durations"]
         unit_variance = unit_variances[name]
         median_observed = statistics.median(durations)
         results[name] = {
@@ -275,11 +310,13 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "a common wall-time target, not identical elapsed time. Calibration "
             "cost is reported separately and not included in trial durations. "
             "Method-specific random draws and integrand evaluations per unit are reported; "
-            "observed RMSE is seed-specific. No quantum, hardware-independent, or universal speed claim."
+            "observed RMSE is seed-specific. Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. No quantum, hardware-independent, or universal speed claim."
         ),
         "target_seconds_per_replication": budget_seconds,
         "replications": replicates,
         "seed": seed,
+        "calibration_execution_order": calibration_order,
+        "trial_execution_order": trial_order,
         "calibration_seconds_total": calibration_seconds,
         "calibration_sampling_units": calibration_units,
         "total_sampling_units_including_calibration": (
