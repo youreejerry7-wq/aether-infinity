@@ -1,0 +1,32 @@
+name: Research release policy regression
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/research.yml'
+      - '.github/workflows/research-release-policy-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check archive-only commits skip deployment without changing schedule
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          workflow = Path(".github/workflows/research.yml").read_text()
+          assert "cron: '17 * * * *'" in workflow, "hourly schedule changed"
+          assert "git add data/research.json" in workflow, "archive-only staging missing"
+          assert 'git diff --cached --quiet ||' in workflow, "unchanged-file guard missing"
+          assert 'git push)' in workflow, "push missing"
+          match = re.search(r'git commit -m "([^"]+)"', workflow)
+          assert match and match.group(1) == "Record scheduled research cycle [skip render]", "deployment-skip message missing"
+          assert "python research.py" in workflow, "research execution missing"
+          print("PASS: six research release-policy checks")
+          PY
