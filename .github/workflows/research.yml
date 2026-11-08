@@ -17,12 +17,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
-      - name: Run automated tests
-        run: pytest
+      # Full regression tests run on pull requests; keep the hourly synthetic cycle lean.
       - name: Execute scheduled research cycle
         run: python research.py
       - name: Validate generated research archive before committing
