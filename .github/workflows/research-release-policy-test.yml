@@ -28,5 +28,6 @@ jobs:
           match = re.search(r'git commit -m "([^"]+)"', workflow)
           assert match and match.group(1) == "Record scheduled research cycle [skip render]", "deployment-skip message missing"
           assert "python research.py" in workflow, "research execution missing"
+          assert "pip install" not in workflow and "pytest" not in workflow, "hourly synthetic cycle should not reinstall dependencies or rerun the full PR test suite"
           print("PASS: six research release-policy checks")
           PY
