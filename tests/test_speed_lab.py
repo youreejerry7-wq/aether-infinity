@@ -26,6 +26,22 @@ class SpeedLabTests(unittest.TestCase):
         for method in (circle_hits, conditional_1d, antithetic_1d):
             self.assertEqual(method(1000, random.Random(42)), method(1000, random.Random(42)))
 
+    def test_benchmark_interleaves_methods_reproducibly(self):
+        first = benchmark(samples=300, replicates=6, seed=77)
+        second = benchmark(samples=300, replicates=6, seed=77)
+        orders = first["execution_order_by_replication"]
+
+        self.assertEqual(orders, second["execution_order_by_replication"])
+        self.assertGreater(len({tuple(order) for order in orders}), 1)
+        for order in orders:
+            self.assertCountEqual(order, METHODS)
+        # Execution order must not change the seeded estimator results.
+        for name in METHODS:
+            self.assertEqual(
+                first["results"][name]["average_estimate"],
+                second["results"][name]["average_estimate"],
+            )
+
     def test_validation(self):
         for method in METHODS.values():
             with self.assertRaises(ValueError):
@@ -133,6 +149,21 @@ class SpeedLabTests(unittest.TestCase):
         data = benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=31)
         self.assertEqual(data["replications"], 2)
         self.assertEqual(data["seed"], 31)
+        self.assertEqual(len(data["calibration_execution_order"]), 9)
+        self.assertEqual(len(data["trial_execution_order"]), len(METHODS) * 2)
+        for name in METHODS:
+            self.assertEqual(
+                sum(item[0] == name for item in data["calibration_execution_order"]),
+                3,
+            )
+            self.assertEqual(
+                sum(item[0] == name for item in data["trial_execution_order"]),
+                2,
+            )
+        repeated = benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=31)
+        self.assertEqual(data["calibration_execution_order"], repeated["calibration_execution_order"])
+        self.assertEqual(data["trial_execution_order"], repeated["trial_execution_order"])
+        self.assertIn("shuffled", data["methodology"])
         self.assertIn("not identical elapsed time", data["methodology"])
         self.assertGreater(data["calibration_seconds_total"], 0)
         self.assertEqual(set(data["results"]), set(METHODS))
