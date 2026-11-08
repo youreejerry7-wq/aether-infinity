@@ -106,17 +106,30 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "antithetic_1d": antithetic_unit_variance_midpoint(),
     }
     results = {}
-    for name, method in METHODS.items():
-        estimates = []
-        durations = []
-        for i in range(replicates):
-            # Fresh deterministic generator per trial; same seeds across methods.
+    trial_data = {
+        name: {"estimates": [], "durations": []}
+        for name in METHODS
+    }
+    execution_order = []
+    order_rng = random.Random(seed ^ 0x5EED5EED)
+    # Interleave methods in a deterministic shuffled order per replication.
+    # Each method keeps the same per-replication RNG seed as before.
+    for i in range(replicates):
+        names = list(METHODS)
+        order_rng.shuffle(names)
+        execution_order.append(names)
+        for name in names:
+            method = METHODS[name]
             rng = random.Random(seed + i * 104729)
             start = time.perf_counter()
             estimate = method(samples, rng)
             elapsed = time.perf_counter() - start
-            estimates.append(estimate)
-            durations.append(elapsed)
+            trial_data[name]["estimates"].append(estimate)
+            trial_data[name]["durations"].append(elapsed)
+
+    for name, data in trial_data.items():
+        estimates = data["estimates"]
+        durations = data["durations"]
         errors = [estimate - math.pi for estimate in estimates]
         # All replications average independent sampling units. The antithetic
         # unit is a correlated pair, whose variance is integrated numerically.
@@ -136,9 +149,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             "random_draws_per_sampling_unit": 2 if name == "circle_hits" else 1,
             "integrand_evaluations_per_sampling_unit": 2 if name == "antithetic_1d" else 1,
             "standard_error_basis": "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic",
-            "theoretical_standard_error": (
-                math.sqrt(unit_variance / samples)
-            ),
+            "theoretical_standard_error": math.sqrt(unit_variance / samples),
             # Descriptive, seed-specific error-vs-time metric; lower is better.
             "observed_rmse_squared_seconds": rmse * rmse * median_time,
         }
@@ -176,7 +187,8 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "samples_per_replication": samples,
         "replications": replicates,
         "seed": seed,
-        "methodology": "Equal independent sampling units, not equal computation. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim.",
+        "execution_order_by_replication": execution_order,
+        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim.",
         "results": results,
     }
 
