@@ -23,6 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           base_ref="${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --depth=1 origin "+refs/heads/${base_ref}:refs/remotes/origin/${base_ref}"
           if git diff --quiet "origin/${base_ref}" HEAD -- data/research.json; then
             echo "PASS: PR does not alter the scheduled research archive."
           else
