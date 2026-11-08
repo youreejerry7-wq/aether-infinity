@@ -286,6 +286,11 @@ class SpeedLabTests(unittest.TestCase):
             def __init__(self, seed):
                 events.append("rng")
 
+            def shuffle(self, values):
+                # The benchmark also uses seeded RNGs for its deterministic
+                # interleaving schedule; keep this test focused on timer order.
+                values.reverse()
+
         def stub_method(samples, rng):
             events.append("method")
             return math.pi
@@ -304,7 +309,8 @@ class SpeedLabTests(unittest.TestCase):
 
         # Three calibration calls per method; each RNG must be created
         # before the timer starts, just as it is for measured trials.
-        self.assertEqual(events[:12], ["rng", "clock", "method", "clock"] * 3)
+        # The first event creates the deterministic calibration-order RNG.
+        self.assertEqual(events[1:13], ["rng", "clock", "method", "clock"] * 3)
 
 
     def test_antithetic_variance_quadrature_runs_once_per_report(self):
