@@ -68,6 +68,9 @@ class DemoRunLimitsTests(unittest.TestCase):
         self.assertEqual(self.client.get("/health").status_code, 200)
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/api/results").status_code, 200)
+        research = self.client.get("/api/research")
+        self.assertEqual(research.status_code, 200)
+        self.assertIsInstance(research.json, list)
 
 
     def test_rolling_window_expires_only_oldest_request(self):
