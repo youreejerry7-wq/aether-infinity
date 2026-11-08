@@ -304,3 +304,19 @@ test("static preview transfer budget and external data dependency stay bounded",
   assert.deepEqual(absoluteUrls, [ARCHIVE_URL], "the archive must remain the only external data URL");
   assert.equal(source.split("fetchImpl(ARCHIVE_URL").length - 1, 1);
 });
+
+test("static HTML and script source stay within byte budgets", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../cdn-preview/index.html"));
+  const script = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"));
+  const htmlBytes = html.byteLength;
+  const scriptBytes = script.byteLength;
+
+  // Deterministic uncompressed source budgets; CDN compression is measured separately.
+  assert.ok(htmlBytes <= 4 * 1024, `HTML source exceeds 4 KiB: ${htmlBytes} bytes`);
+  assert.ok(scriptBytes <= 8 * 1024, `deferred script exceeds 8 KiB: ${scriptBytes} bytes`);
+  assert.ok(
+    htmlBytes + scriptBytes <= 12 * 1024,
+    `initial local assets exceed 12 KiB: ${htmlBytes + scriptBytes} bytes`
+  );
+});
+
