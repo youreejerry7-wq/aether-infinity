@@ -300,6 +300,9 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             ),
             "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
             "theoretical_standard_error": math.sqrt(unit_variance / samples),
+            "standard_error_basis": (
+                "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
+            ),
             "median_observed_seconds": median_observed,
             "min_observed_seconds": min(durations),
             "max_observed_seconds": max(durations),
