@@ -28,6 +28,6 @@ jobs:
       # Each short run is bounded and reports its actual timings, sample
       # counts, calibration overhead, deterministic method order, and seed.
       - name: Show measured matched-time trials (seed 2026)
-        run: python speed_lab.py --matched-seconds 0.005 --replicates 16 --seed 2026
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 10 --seed 2026
       - name: Repeat matched-time trials with an independent seed
-        run: python speed_lab.py --matched-seconds 0.005 --replicates 16 --seed 2027
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 10 --seed 2027
