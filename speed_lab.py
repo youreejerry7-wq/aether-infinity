@@ -17,6 +17,7 @@ import time
 
 
 MAX_TOTAL_SAMPLES = 2_000_000
+MAX_REPLICATES = 1_000
 
 
 def benchmark_environment():
@@ -94,6 +95,8 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         raise ValueError("samples must be a positive integer")
     if isinstance(replicates, bool) or not isinstance(replicates, int) or replicates < 2:
         raise ValueError("replicates must be an integer >= 2")
+    if replicates > MAX_REPLICATES:
+        raise ValueError(f"replicates must not exceed {MAX_REPLICATES:,}")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("seed must be an integer")
     if samples * replicates * len(METHODS) > MAX_TOTAL_SAMPLES:
