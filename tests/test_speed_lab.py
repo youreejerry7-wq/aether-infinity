@@ -184,6 +184,10 @@ class SpeedLabTests(unittest.TestCase):
                                      metrics["max_observed_seconds"])
                 self.assertTrue(math.isfinite(metrics["rmse"]))
                 self.assertGreater(metrics["theoretical_standard_error"], 0)
+                expected_basis = (
+                    "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
+                )
+                self.assertEqual(metrics["standard_error_basis"], expected_basis)
                 expected_draws = 2 if name == "circle_hits" else 1
                 expected_evaluations = 2 if name == "antithetic_1d" else 1
                 self.assertEqual(metrics["random_draws_per_sampling_unit"], expected_draws)
