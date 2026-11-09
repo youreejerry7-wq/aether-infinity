@@ -25,9 +25,9 @@ jobs:
       - name: Show reproducible benchmark
         run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
 
-      # Twenty short trials improve the RMSE estimate while remaining within
-      # the benchmark's two-million-sampling-unit cap for the 5 ms target.
+      # Fifteen short trials improve on the original 10 while staying below
+      # the two-million-unit cap without capping any method's sample count.
       - name: Show measured matched-time trials (seed 2026)
-        run: python speed_lab.py --matched-seconds 0.005 --replicates 20 --seed 2026
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2026
       - name: Repeat matched-time trials with an independent seed
-        run: python speed_lab.py --matched-seconds 0.005 --replicates 20 --seed 2027
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2027
