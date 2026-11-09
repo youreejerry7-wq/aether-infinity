@@ -27,24 +27,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
-      - name: Measure initial health and homepage responses
+      - name: Measure initial homepage and health responses (homepage first)
         shell: bash
         run: |
           set -euo pipefail
-          metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 \
-            -o "$RUNNER_TEMP/health.json" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' \
-            https://aether-infinity.onrender.com/health)
-          read -r code ttfb total bytes <<< "$metrics"
-          echo "GET /health: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
-          test "$code" = 200
-          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$RUNNER_TEMP/health.json"
+          # The first request in this job must be the homepage so its TTFB
+          # captures any free-tier wake-up delay instead of hiding it behind /health.
           metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 \
             -o "$RUNNER_TEMP/home.html" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' \
             https://aether-infinity.onrender.com/)
           read -r code ttfb total bytes <<< "$metrics"
-          echo "GET /: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          echo "Initial GET / (homepage-first): HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
           test "$code" = 200
           grep -q 'AETHER' "$RUNNER_TEMP/home.html"
+          metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 \
+            -o "$RUNNER_TEMP/health.json" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' \
+            https://aether-infinity.onrender.com/health)
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "Follow-on GET /health: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = 200
+          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$RUNNER_TEMP/health.json"
       - name: Measure follow-up health, homepage, and archive
         shell: bash
         run: |
