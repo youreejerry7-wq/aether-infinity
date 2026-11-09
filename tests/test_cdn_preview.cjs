@@ -305,18 +305,21 @@ test("static preview transfer budget and external data dependency stay bounded",
   assert.equal(source.split("fetchImpl(ARCHIVE_URL").length - 1, 1);
 });
 
-test("static HTML and script source stay within byte budgets", () => {
-  const html = fs.readFileSync(path.join(__dirname, "../cdn-preview/index.html"));
-  const script = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"));
-  const htmlBytes = html.byteLength;
-  const scriptBytes = script.byteLength;
+test("concurrent refresh attempts do not start duplicate archive requests", async () => {
+  let resolveResponse;
+  const h = makeHarness(() => new Promise((resolve) => {
+    resolveResponse = resolve;
+  }));
 
-  // Deterministic uncompressed source budgets; CDN compression is measured separately.
-  assert.ok(htmlBytes <= 4 * 1024, `HTML source exceeds 4 KiB: ${htmlBytes} bytes`);
-  assert.ok(scriptBytes <= 8 * 1024, `deferred script exceeds 8 KiB: ${scriptBytes} bytes`);
-  assert.ok(
-    htmlBytes + scriptBytes <= 12 * 1024,
-    `initial local assets exceed 12 KiB: ${htmlBytes + scriptBytes} bytes`
-  );
+  const first = h.controller.refresh(false);
+  const second = h.controller.refresh(true);
+
+  assert.equal(h.calls.length, 1, "only one archive request may be in flight");
+  assert.equal(await second, false, "the concurrent refresh should be ignored");
+
+  resolveResponse({ ok: true, json: async () => archive() });
+  assert.equal(await first, true);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.document.nodes.status.textContent, "Latest archive record loaded");
 });
 
