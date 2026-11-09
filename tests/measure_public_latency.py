@@ -14,8 +14,9 @@ BASE = "https://aether-infinity.onrender.com"
 RAW = "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity"
 BRANCH = "review/cdn-readonly-preview-20261107"
 TARGETS = [
-    ("aether_health", BASE + "/health", 55, 2),
+    # Hit the homepage first so this run's first request can reveal a sleeping-service delay.
     ("aether_home", BASE + "/", 55, 2),
+    ("aether_health", BASE + "/health", 55, 2),
     ("preview_html_source", f"{RAW}/{BRANCH}/cdn-preview/index.html", 25, 1),
     ("preview_js_source", f"{RAW}/{BRANCH}/cdn-preview/app.js", 25, 1),
     ("public_archive", f"{RAW}/main/data/research.json", 25, 1),
