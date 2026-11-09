@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from speed_lab import (
+    MAX_REPLICATES,
     MAX_TOTAL_SAMPLES,
     METHODS,
     antithetic_1d,
@@ -49,6 +50,8 @@ class SpeedLabTests(unittest.TestCase):
         for kwargs in (
             {"samples": 0},
             {"replicates": 1},
+            # Tiny sample counts must not permit unbounded result/order arrays.
+            {"samples": 1, "replicates": MAX_REPLICATES + 1},
             {"samples": MAX_TOTAL_SAMPLES, "replicates": 2},
             # Each of the three methods counts against the shared budget.
             {"samples": 250_000, "replicates": 3},
