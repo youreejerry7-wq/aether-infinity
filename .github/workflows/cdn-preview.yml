@@ -4,6 +4,7 @@ on:
     paths:
       - 'cdn-preview/**'
       - 'tests/test_cdn_preview.cjs'
+      - 'tests/measure_public_latency.py'
       - 'data/research.json'
       - '.github/workflows/cdn-preview.yml'
   workflow_dispatch:
@@ -12,7 +13,7 @@ permissions:
 jobs:
   preview:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -66,3 +67,5 @@ jobs:
           }
           console.log(`CDN preview accepts live archive schema (${archive.length} cycles)`);
           NODE
+      - name: Measure first and repeat AETHER latency and payloads (read-only)
+        run: python3 tests/measure_public_latency.py
