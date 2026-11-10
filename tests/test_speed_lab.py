@@ -314,10 +314,11 @@ class SpeedLabTests(unittest.TestCase):
                 budget_seconds=0.005, replicates=2, seed=1
             )
 
-        # Three calibration calls per method; each RNG must be created
-        # before the timer starts, just as it is for measured trials.
-        # The first event creates the deterministic calibration-order RNG.
-        self.assertEqual(events[1:13], ["rng", "clock", "method", "clock"] * 3)
+        # The two leading clock events measure shared quadrature setup.
+        self.assertEqual(events[:2], ["clock", "clock"])
+        # The next event creates the deterministic calibration-order RNG.
+        # Each method RNG is created before its estimator timer starts.
+        self.assertEqual(events[3:15], ["rng", "clock", "method", "clock"] * 3)
 
 
     def test_antithetic_variance_quadrature_runs_once_per_report(self):
