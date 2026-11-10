@@ -70,10 +70,10 @@ def test_api_results_empty_and_run(client):
     assert results_list[0]["status"] == "completed"
 
 
-def test_api_research_endpoint(client, tmp_path, monkeypatch):
+def test_api_research_endpoint(client, tmp_path):
     res_file = tmp_path / "research.json"
     res_file.write_text(json.dumps([{"time": "2026-01-01T00:00:00Z", "experiments": []}]))
-    monkeypatch.setattr(flask_app, "RESEARCH_JSON_PATH", res_file)
+    flask_app.RESEARCH_JSON_PATH = res_file
 
     response = client.get("/api/research")
     assert response.status_code == 200
