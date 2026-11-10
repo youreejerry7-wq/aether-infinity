@@ -5,6 +5,7 @@ on:
       - 'cdn-preview/**'
       - 'tests/test_cdn_preview.cjs'
       - 'tests/measure_public_latency.py'
+      - 'tests/test_measure_public_latency.py'
       - 'data/research.json'
       - '.github/workflows/cdn-preview.yml'
   workflow_dispatch:
@@ -33,6 +34,8 @@ jobs:
           fi
       - name: Test cache, throttling, visibility, bounds, and safe rendering
         run: node --test tests/test_cdn_preview.cjs
+      - name: Test compressed and identity HTTP body decoding
+        run: python -m unittest discover -s tests -p 'test_measure_public_latency.py'
       - name: Verify the public archive supports browser cross-origin reads
         shell: bash
         run: |
@@ -41,12 +44,12 @@ jobs:
           curl --fail --silent --show-error --location \
             --dump-header "$RUNNER_TEMP/archive.headers" \
             --output "$RUNNER_TEMP/research.json" \
-            --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\n' \
+            --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\\n' \
             "$archive_url"
           # The frontend uses cache: "default"; require a positive origin cache lifetime.
           grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/archive.headers"
           grep -Ei '^cache-control:|^etag:' "$RUNNER_TEMP/archive.headers"
-          grep -Eiq '^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
+          grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
           python - "$RUNNER_TEMP/research.json" <<'PY'
           import json
           import sys
