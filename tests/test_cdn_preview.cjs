@@ -285,6 +285,14 @@ test("initial HTML stays lightweight and avoids third-party render-blocking asse
   assert.ok(externalLinks[0].includes('href="https://raw.githubusercontent.com"'));
   assert.ok(externalLinks[0].includes("crossorigin"));
   assert.doesNotMatch(html, /<iframe\b|<img\b/i);
+  const policy = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/i);
+  assert.ok(policy, "static preview must declare a restrictive Content Security Policy");
+  assert.ok(policy[1].includes("default-src 'none'"));
+  assert.ok(policy[1].includes("script-src 'self'"));
+  assert.ok(policy[1].includes("connect-src https://raw.githubusercontent.com"));
+  assert.ok(policy[1].includes("object-src 'none'"));
+  assert.ok(!policy[1].includes("unsafe-eval"));
+  assert.match(html, /<meta name="referrer" content="no-referrer">/i);
   assert.doesNotMatch(html, /@import\s+url|url\(\s*["']?https?:/i);
 });
 
