@@ -9,6 +9,7 @@ from speed_lab import (
     MAX_REPLICATES,
     MAX_TOTAL_SAMPLES,
     METHODS,
+    allocate_sampling_budget,
     antithetic_1d,
     benchmark,
     benchmark_matched_time,
@@ -177,6 +178,13 @@ class SpeedLabTests(unittest.TestCase):
                 total_units += n * data["replications"]
                 self.assertGreaterEqual(n, 100)
                 self.assertLessEqual(n, 100_000)
+                self.assertLessEqual(
+                    n, metrics["requested_sampling_units_per_replication"]
+                )
+                self.assertEqual(
+                    metrics["sample_cap_reached"],
+                    n < metrics["requested_sampling_units_per_replication"],
+                )
                 self.assertGreater(metrics["median_observed_seconds"], 0)
                 self.assertLessEqual(metrics["min_observed_seconds"],
                                      metrics["median_observed_seconds"])
@@ -219,6 +227,28 @@ class SpeedLabTests(unittest.TestCase):
         self.assertLessEqual(data["total_sampling_units_including_calibration"],
                              data["sampling_unit_budget"])
         self.assertEqual(data["sampling_unit_budget"], MAX_TOTAL_SAMPLES)
+        self.assertGreater(data["sampling_budget_scale_factor"], 0.0)
+        self.assertLessEqual(data["sampling_budget_scale_factor"], 1.0)
+
+    def test_shared_budget_scales_aggregate_only_when_needed(self):
+        requested = {
+            "circle_hits": 32_431,
+            "conditional_1d": 60_000,
+            "antithetic_1d": 38_831,
+        }
+        allocated, scale = allocate_sampling_budget(requested, 15, 9_000)
+        self.assertEqual(scale, 1.0)
+        self.assertEqual(allocated, requested)
+        self.assertLessEqual(9_000 + 15 * sum(allocated.values()), MAX_TOTAL_SAMPLES)
+
+        oversized = {name: 100_000 for name in METHODS}
+        allocated, scale = allocate_sampling_budget(oversized, 15, 9_000)
+        self.assertLess(scale, 1.0)
+        self.assertTrue(all(allocated[name] < oversized[name] for name in oversized))
+        total = 9_000 + 15 * sum(allocated.values())
+        self.assertLessEqual(total, MAX_TOTAL_SAMPLES)
+        self.assertLess(MAX_TOTAL_SAMPLES - total, 15)
+        self.assertGreaterEqual(min(allocated.values()), 100)
 
     def test_matched_time_rejects_unbounded_inputs(self):
         for kwargs in (

@@ -207,6 +207,32 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
 
 
 
+def allocate_sampling_budget(requested_samples, replicates, calibration_units):
+    """Proportionally scale calibrated counts only when their aggregate exceeds the shared cap."""
+    if not requested_samples:
+        raise ValueError("requested_samples must not be empty")
+    available_units = MAX_TOTAL_SAMPLES - calibration_units
+    if replicates <= 0 or available_units < 0:
+        raise ValueError("invalid sampling-budget inputs")
+    available_per_replication = available_units // replicates
+    requested_total = sum(requested_samples.values())
+    if requested_total <= available_per_replication:
+        return dict(requested_samples), 1.0
+    if requested_total <= 0:
+        raise ValueError("requested sampling units must be positive")
+    scale = available_per_replication / requested_total
+    allocated = {
+        name: max(100, math.floor(samples * scale))
+        for name, samples in requested_samples.items()
+    }
+    while sum(allocated.values()) > available_per_replication:
+        largest = max(allocated, key=allocated.get)
+        if allocated[largest] <= 100:
+            raise ValueError("sampling budget is too small for minimum method samples")
+        allocated[largest] -= 1
+    return allocated, scale
+
+
 def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     """Calibrate then *measure* independent trials near a common time target.
 
@@ -238,7 +264,6 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     # Include calibration calls in the global sampling-unit budget.
     calibration_units_per_method = 3 * 1000
     calibration_units = len(METHODS) * calibration_units_per_method
-    max_samples = min(100_000, (MAX_TOTAL_SAMPLES - calibration_units) // (len(METHODS) * replicates))
     method_names = list(METHODS)
     method_indices = {name: index for index, name in enumerate(method_names)}
 
@@ -262,13 +287,16 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         sum(times) for times in calibration_times_by_method.values()
     )
 
-    samples_by_method = {}
+    requested_samples_by_method = {}
     for name, calibration_times in calibration_times_by_method.items():
         calibration_median = statistics.median(calibration_times)
-        samples_by_method[name] = min(
-            max_samples,
+        requested_samples_by_method[name] = min(
+            100_000,
             max(100, round(1000 * budget_seconds / calibration_median)),
         )
+    samples_by_method, budget_scale_factor = allocate_sampling_budget(
+        requested_samples_by_method, replicates, calibration_units
+    )
 
     # Interleave measured trials with a deterministic shuffled schedule.
     # Each method retains its own deterministic RNG seed for each replicate.
@@ -319,7 +347,8 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "median_observed_seconds": median_observed,
             "min_observed_seconds": min(durations),
             "max_observed_seconds": max(durations),
-            "sample_cap_reached": samples == max_samples,
+            "requested_sampling_units_per_replication": requested_samples_by_method[name],
+            "sample_cap_reached": samples < requested_samples_by_method[name],
         }
     return {
         "environment": benchmark_environment(),
@@ -334,6 +363,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "Measured trials with separately calibrated sampling-unit counts near "
             "a common wall-time target, not identical elapsed time. Calibration "
             "cost is reported separately and not included in trial durations. "
+            "Calibrated per-method counts are proportionally scaled only if their aggregate exceeds the shared budget; requested and allocated counts are reported. "
             "Method-specific random draws and integrand evaluations per unit are reported; "
             "observed RMSE is seed-specific. Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. No quantum, hardware-independent, or universal speed claim."
         ),
@@ -359,6 +389,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             * (2 if name == "antithetic_1d" else 1)
             for name, item in results.items()
         ),
+        "sampling_budget_scale_factor": budget_scale_factor,
         "sampling_unit_budget": MAX_TOTAL_SAMPLES,
         "results": results,
     }

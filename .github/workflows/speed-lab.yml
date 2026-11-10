@@ -25,8 +25,9 @@ jobs:
       - name: Show reproducible benchmark
         run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
 
-      # Fifteen short trials improve on the original 10 while staying below
-      # the two-million-unit cap without capping any method's sample count.
+      # Fifteen short trials; calibrated counts are proportionally scaled
+      # only when their aggregate would exceed the shared two-million-unit cap.
+      # Actual durations, requested counts, and allocated counts remain visible.
       - name: Show measured matched-time trials (seed 2026)
         run: python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2026
       - name: Repeat matched-time trials with an independent seed
