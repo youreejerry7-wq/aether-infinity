@@ -214,6 +214,8 @@ def allocate_sampling_budget(requested_samples, replicates, calibration_units):
     available_units = MAX_TOTAL_SAMPLES - calibration_units
     if replicates <= 0 or available_units < 0:
         raise ValueError("invalid sampling-budget inputs")
+    # Divide the shared remaining budget across replicates, not equally per method;
+    # unused capacity from faster methods remains available to the others.
     available_per_replication = available_units // replicates
     requested_total = sum(requested_samples.values())
     if requested_total <= available_per_replication:
