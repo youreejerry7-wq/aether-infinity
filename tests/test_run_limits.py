@@ -1,6 +1,7 @@
 """Offline, disposable-DB regression checks for public demo compute bounds."""
 import os
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -95,6 +96,39 @@ class DemoRunLimitsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "synthetic failure"):
                 self.client.post("/api/run")
         self.assertEqual(self.client.post("/api/run").status_code, 200)
+        self.assertEqual(len(self.client.get("/api/results").json), 1)
+
+
+    def test_concurrent_requests_are_rejected_by_the_route(self):
+        entered = threading.Event()
+        release = threading.Event()
+        first_result = {}
+
+        def slow_random():
+            entered.set()
+            if not release.wait(timeout=3):
+                raise RuntimeError("synthetic concurrency test timed out")
+            return 0.25
+
+        def first_request():
+            with demo.app.test_client() as client:
+                first_result["response"] = client.post("/api/run")
+
+        worker = threading.Thread(target=first_request, daemon=True)
+        with patch.object(demo.random, "random", side_effect=slow_random):
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(timeout=2))
+                with demo.app.test_client() as client:
+                    rejected = client.post("/api/run")
+                self.assertEqual(rejected.status_code, 429)
+                self.assertEqual(rejected.headers["Retry-After"], "1")
+            finally:
+                release.set()
+                worker.join(timeout=3)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(first_result["response"].status_code, 200)
         self.assertEqual(len(self.client.get("/api/results").json), 1)
 
 
