@@ -4,7 +4,12 @@
 The first sample is NOT guaranteed to be a cold start. It is simply the first
 request made by this GitHub-hosted runner; the immediate repeat is a warm
 follow-up candidate. No response bodies are printed or persisted.
+
+Requests advertise gzip support, then count the received wire bytes separately
+from the decoded body size. This measures the actual transfer representation
+used by a normal browser without confusing compressed and uncompressed sizes.
 """
+import gzip
 import json
 import time
 import urllib.error
@@ -23,31 +28,55 @@ TARGETS = [
 ]
 
 
+def decode_body(body, content_encoding):
+    """Decode the transfer body while keeping the original wire size measurable."""
+    encoding = (content_encoding or "").strip().lower()
+    if encoding in ("", "identity"):
+        return body
+    if encoding == "gzip":
+        return gzip.decompress(body)
+    raise ValueError("Unsupported content encoding: " + encoding)
+
+
 def request_once(label, url, sample, timeout):
     started = time.perf_counter()
     request = urllib.request.Request(
-        url, headers={"User-Agent": "AETHER-read-only-performance-smoke/1.0"}
+        url,
+        headers={
+            "User-Agent": "AETHER-read-only-performance-smoke/1.0",
+            "Accept-Encoding": "gzip",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             headers_at = time.perf_counter()
-            body = response.read()
+            wire_body = response.read()
             finished = time.perf_counter()
             headers = response.headers
+            decoded_body = decode_body(wire_body, headers.get("Content-Encoding"))
             record = {
                 "target": label,
                 "sample": sample,
                 "status": response.status,
                 "ttfb_ms": round((headers_at - started) * 1000, 2),
                 "total_ms": round((finished - started) * 1000, 2),
-                "bytes": len(body),
+                # bytes is retained as the actual transferred body size.
+                "bytes": len(wire_body),
+                "decoded_bytes": len(decoded_body),
+                "wire_fraction": round(len(wire_body) / len(decoded_body), 4)
+                    if decoded_body else 1.0,
                 "content_type": headers.get("Content-Type"),
-                "content_encoding": headers.get("Content-Encoding"),
+                "content_encoding": headers.get("Content-Encoding") or "identity",
                 "cache_control": headers.get("Cache-Control"),
                 "etag_present": bool(headers.get("ETag")),
                 "age": headers.get("Age"),
                 "final_url": response.geturl(),
             }
+            if label == "public_archive":
+                archive = json.loads(decoded_body.decode("utf-8"))
+                if not isinstance(archive, list) or not archive:
+                    raise ValueError("Public archive must be a nonempty JSON list")
+                record["archive_cycles"] = len(archive)
             return record, 200 <= response.status < 300
     except urllib.error.HTTPError as exc:
         body = exc.read()
