@@ -100,36 +100,48 @@ class DemoRunLimitsTests(unittest.TestCase):
 
 
     def test_concurrent_requests_are_rejected_by_the_route(self):
-        entered = threading.Event()
+        entered = threading.Semaphore(0)
         release = threading.Event()
-        first_result = {}
+        local = threading.local()
+        results = {}
 
         def slow_random():
-            entered.set()
-            if not release.wait(timeout=3):
-                raise RuntimeError("synthetic concurrency test timed out")
+            # Pause only the first random draw in each worker so all configured
+            # slots are occupied at once; later draws proceed after release.
+            if not getattr(local, "paused", False):
+                local.paused = True
+                entered.release()
+                if not release.wait(timeout=5):
+                    raise RuntimeError("synthetic concurrency test timed out")
             return 0.25
 
-        def first_request():
+        def request(name):
             with demo.app.test_client() as client:
-                first_result["response"] = client.post("/api/run")
+                results[name] = client.post("/api/run")
 
-        worker = threading.Thread(target=first_request, daemon=True)
+        workers = [
+            threading.Thread(target=request, args=(f"request-{index}",), daemon=True)
+            for index in range(demo.RUN_MAX_IN_FLIGHT)
+        ]
         with patch.object(demo.random, "random", side_effect=slow_random):
-            worker.start()
+            for worker in workers:
+                worker.start()
             try:
-                self.assertTrue(entered.wait(timeout=2))
+                for _ in workers:
+                    self.assertTrue(entered.acquire(timeout=3))
                 with demo.app.test_client() as client:
                     rejected = client.post("/api/run")
                 self.assertEqual(rejected.status_code, 429)
                 self.assertEqual(rejected.headers["Retry-After"], "1")
             finally:
                 release.set()
-                worker.join(timeout=3)
+                for worker in workers:
+                    worker.join(timeout=5)
 
-        self.assertFalse(worker.is_alive())
-        self.assertEqual(first_result["response"].status_code, 200)
-        self.assertEqual(len(self.client.get("/api/results").json), 1)
+        self.assertTrue(all(not worker.is_alive() for worker in workers))
+        self.assertEqual(set(results), {f"request-{i}" for i in range(len(workers))})
+        self.assertTrue(all(response.status_code == 200 for response in results.values()))
+        self.assertEqual(len(self.client.get("/api/results").json), len(workers))
 
 
 if __name__ == "__main__":
