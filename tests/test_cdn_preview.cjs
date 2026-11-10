@@ -150,6 +150,7 @@ test("successful refreshes are throttled for five minutes unless manually forced
 
   await h.controller.refresh(true);
   assert.equal(h.calls.length, 3);
+  assert.equal(h.calls[2].options.cache, "reload");
 });
 
 test("failed archive reads show a generic message and retry after a bounded delay", async () => {
