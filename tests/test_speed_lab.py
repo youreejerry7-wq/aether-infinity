@@ -333,5 +333,18 @@ class SpeedLabTests(unittest.TestCase):
             estimate.assert_called_once_with()
 
 
+    def test_variance_reference_setup_cost_is_reported_separately(self):
+        reports = (
+            benchmark(samples=100, replicates=2, seed=5),
+            benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=5),
+        )
+        for report in reports:
+            setup = report["variance_reference_setup"]
+            self.assertEqual(setup["method"], "deterministic_midpoint_quadrature")
+            self.assertEqual(setup["quadrature_points"], 16_384)
+            self.assertGreaterEqual(setup["elapsed_seconds"], 0.0)
+            self.assertFalse(setup["included_in_per_method_trial_times"])
+
+
 if __name__ == "__main__":
     unittest.main()
