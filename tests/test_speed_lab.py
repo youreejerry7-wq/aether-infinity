@@ -242,12 +242,15 @@ class SpeedLabTests(unittest.TestCase):
         self.assertLessEqual(9_000 + 15 * sum(allocated.values()), MAX_TOTAL_SAMPLES)
 
         oversized = {name: 100_000 for name in METHODS}
-        allocated, scale = allocate_sampling_budget(oversized, 15, 9_000)
+        replicates = 15
+        allocated, scale = allocate_sampling_budget(oversized, replicates, 9_000)
         self.assertLess(scale, 1.0)
         self.assertTrue(all(allocated[name] < oversized[name] for name in oversized))
-        total = 9_000 + 15 * sum(allocated.values())
+        total = 9_000 + replicates * sum(allocated.values())
         self.assertLessEqual(total, MAX_TOTAL_SAMPLES)
-        self.assertLess(MAX_TOTAL_SAMPLES - total, 15)
+        # Integer per-replication allocation can leave fewer than one
+        # sampling unit per method per replicate unused.
+        self.assertLess(MAX_TOTAL_SAMPLES - total, replicates * len(METHODS))
         self.assertGreaterEqual(min(allocated.values()), 100)
 
     def test_matched_time_rejects_unbounded_inputs(self):
