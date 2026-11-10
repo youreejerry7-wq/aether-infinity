@@ -122,7 +122,9 @@
       try {
         // Stable URL + normal browser caching; no cache-busting query or no-store.
         const response = await fetchImpl(ARCHIVE_URL, {
-          cache: "default",
+          // Automatic refreshes honor the HTTP cache; an explicit button click
+          // bypasses a still-fresh cached response so it actually refreshes.
+          cache: force ? "reload" : "default",
           signal: controller.signal
         });
         if (!response || !response.ok) throw new Error("archive_unavailable");
