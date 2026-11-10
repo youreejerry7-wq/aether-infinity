@@ -18,6 +18,7 @@ import time
 
 MAX_TOTAL_SAMPLES = 2_000_000
 MAX_REPLICATES = 1_000
+ANTITHETIC_VARIANCE_INTERVALS = 16_384
 
 
 def benchmark_environment():
@@ -69,7 +70,7 @@ METHODS = {
 }
 
 
-def antithetic_unit_variance_midpoint(intervals=16_384):
+def antithetic_unit_variance_midpoint(intervals=ANTITHETIC_VARIANCE_INTERVALS):
     """Approximate Var[2(sqrt(1-X^2)+sqrt(1-(1-X)^2))] for X~U(0,1).
 
     Independent antithetic *pairs* are sampling units. Their two function
@@ -102,11 +103,14 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
     if samples * replicates * len(METHODS) > MAX_TOTAL_SAMPLES:
         raise ValueError(f"total sampling units across all methods must not exceed {MAX_TOTAL_SAMPLES:,}")
 
-    # Compute deterministic quadrature once per report, not once per method.
+    # Report shared reference setup separately from per-method trial timings.
+    variance_setup_start = time.perf_counter()
+    antithetic_variance = antithetic_unit_variance_midpoint()
+    variance_reference_setup_seconds = time.perf_counter() - variance_setup_start
     unit_variances = {
         "circle_hits": 4 * math.pi - math.pi ** 2,
         "conditional_1d": 32 / 3 - math.pi ** 2,
-        "antithetic_1d": antithetic_unit_variance_midpoint(),
+        "antithetic_1d": antithetic_variance,
     }
     results = {}
     trial_data = {
@@ -185,6 +189,12 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
 
     return {
         "environment": benchmark_environment(),
+        "variance_reference_setup": {
+            "method": "deterministic_midpoint_quadrature",
+            "quadrature_points": ANTITHETIC_VARIANCE_INTERVALS,
+            "elapsed_seconds": variance_reference_setup_seconds,
+            "included_in_per_method_trial_times": False,
+        },
         "reference": "pi",
         "target_value": math.pi,
         "samples_per_replication": samples,
@@ -214,11 +224,14 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("seed must be an integer")
 
-    # Reuse the same one-time deterministic variance calculation across methods.
+    # Report shared reference setup separately from per-method trial timings.
+    variance_setup_start = time.perf_counter()
+    antithetic_variance = antithetic_unit_variance_midpoint()
+    variance_reference_setup_seconds = time.perf_counter() - variance_setup_start
     unit_variances = {
         "circle_hits": 4 * math.pi - math.pi ** 2,
         "conditional_1d": 32 / 3 - math.pi ** 2,
-        "antithetic_1d": antithetic_unit_variance_midpoint(),
+        "antithetic_1d": antithetic_variance,
     }
     results = {}
     calibration_seconds = 0.0
@@ -310,6 +323,12 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         }
     return {
         "environment": benchmark_environment(),
+        "variance_reference_setup": {
+            "method": "deterministic_midpoint_quadrature",
+            "quadrature_points": ANTITHETIC_VARIANCE_INTERVALS,
+            "elapsed_seconds": variance_reference_setup_seconds,
+            "included_in_per_method_trial_times": False,
+        },
         "reference": "pi",
         "methodology": (
             "Measured trials with separately calibrated sampling-unit counts near "
