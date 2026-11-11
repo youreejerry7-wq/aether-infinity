@@ -8,6 +8,7 @@ const {
   MAX_EXPERIMENTS,
   REQUEST_TIMEOUT_MS,
   REFRESH_MS,
+  STORAGE_KEY,
   RETRY_MS,
   createController,
   isUsableArchive
@@ -66,7 +67,7 @@ function makeDocument() {
   };
 }
 
-function makeHarness(fetchImpl, start = 1000) {
+function makeHarness(fetchImpl, start = 1000, storage = null) {
   const document = makeDocument();
   const calls = [];
   const timers = [];
@@ -89,7 +90,8 @@ function makeHarness(fetchImpl, start = 1000) {
     AbortControllerImpl: class {
       constructor() { this.signal = {}; this.aborted = false; }
       abort() { this.aborted = true; }
-    }
+    },
+    storage
   });
   return {
     controller,
@@ -170,6 +172,54 @@ test("failed archive reads show a generic message and retry after a bounded dela
   h.advance(RETRY_MS);
   assert.equal(await h.controller.refresh(false), true);
   assert.equal(h.calls.length, 2);
+});
+
+test("saved public archive renders immediately and remains visible when refresh fails", async () => {
+  const saved = archive("saved public cycle");
+  const storage = {
+    getItem(key) {
+      assert.equal(key, STORAGE_KEY);
+      return JSON.stringify(saved);
+    },
+    setItem() { throw new Error("storage should not be written on a failed fetch"); }
+  };
+  const h = makeHarness(async () => {
+    throw new Error("private transport detail");
+  }, 1000, storage);
+
+  // The last successful public archive is rendered before any network request.
+  assert.match(h.document.nodes.status.textContent, /saved archive while checking for updates/i);
+  assert.match(h.document.nodes.summary.textContent, /2 archived cycles/);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "saved public cycle");
+
+  assert.equal(await h.controller.refresh(false), false);
+  assert.match(h.document.nodes.status.textContent, /showing saved archive \(may be stale\)/i);
+  assert.equal(h.document.nodes.experiments.children.length, 1);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "saved public cycle");
+  assert.doesNotMatch(h.document.nodes.status.textContent, /private transport detail/);
+});
+
+test("invalid or unavailable local storage never blocks a fresh archive response", async () => {
+  const writes = [];
+  const storage = {
+    getItem() { return "{invalid json"; },
+    setItem(key, value) { writes.push({ key, value }); }
+  };
+  const h = makeHarness(async () => ({ ok: true, json: async () => archive("fresh archive") }), 1000, storage);
+  assert.equal(h.document.nodes.summary.textContent, "");
+  assert.equal(await h.controller.refresh(false), true);
+  assert.match(h.document.nodes.summary.textContent, /2 archived cycles/);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].key, STORAGE_KEY);
+  assert.equal(JSON.parse(writes[0].value)[0].experiments[0].name, "fresh archive");
+
+  const throwingStorage = {
+    getItem() { throw new Error("storage blocked"); },
+    setItem() { throw new Error("storage quota"); }
+  };
+  const fallback = makeHarness(async () => ({ ok: true, json: async () => archive("network still works") }), 1000, throwingStorage);
+  assert.equal(await fallback.controller.refresh(false), true);
+  assert.equal(fallback.document.nodes.experiments.children[0].children[0].textContent, "network still works");
 });
 
 test("a failed refresh clears previously rendered archive data", async () => {
