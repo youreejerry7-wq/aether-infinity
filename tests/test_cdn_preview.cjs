@@ -222,7 +222,7 @@ test("invalid or unavailable local storage never blocks a fresh archive response
   assert.equal(fallback.document.nodes.experiments.children[0].children[0].textContent, "network still works");
 });
 
-test("a failed refresh clears previously rendered archive data", async () => {
+test("a failed refresh retains the last known-good archive in memory", async () => {
   let fail = false;
   const h = makeHarness(async () => {
     if (fail) throw new Error("private transport detail");
@@ -236,11 +236,33 @@ test("a failed refresh clears previously rendered archive data", async () => {
   fail = true;
   h.advance(REFRESH_MS);
   assert.equal(await h.controller.refresh(false), false);
-  assert.equal(h.document.nodes.summary.textContent, "");
-  assert.equal(h.document.nodes.experiments.children.length, 0);
-  assert.match(h.document.nodes.status.textContent, /temporarily unavailable/);
-  assert.match(h.document.nodes.note.textContent, /No current archive data is displayed/);
+  assert.match(h.document.nodes.summary.textContent, /archived cycles/);
+  assert.equal(h.document.nodes.experiments.children.length, 1);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "last good cycle");
+  assert.match(h.document.nodes.status.textContent, /last known-good archive \(may be stale\)/i);
   assert.doesNotMatch(h.document.nodes.status.textContent, /private transport detail/);
+});
+
+test("last known-good archive remains visible when browser storage writes fail", async () => {
+  let attempt = 0;
+  const storage = {
+    getItem() { return null; },
+    setItem() { throw new Error("storage quota"); }
+  };
+  const h = makeHarness(async () => {
+    attempt += 1;
+    if (attempt === 1) return { ok: true, json: async () => archive("in-memory last good") };
+    throw new Error("private transport detail");
+  }, 1000, storage);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "in-memory last good");
+
+  h.advance(REFRESH_MS);
+  assert.equal(await h.controller.refresh(false), false);
+  assert.match(h.document.nodes.status.textContent, /last known-good archive \(may be stale\)/i);
+  assert.match(h.document.nodes.summary.textContent, /archived cycles/);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "in-memory last good");
 });
 
 test("hidden tabs do not fetch; visibility can resume a due refresh", async () => {
