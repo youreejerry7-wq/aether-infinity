@@ -10,7 +10,6 @@ const {
   REFRESH_MS,
   STORAGE_KEY,
   RETRY_MS,
-  MANUAL_REFRESH_COOLDOWN_MS,
   createController,
   isUsableArchive
 } = require("../cdn-preview/app.js");
@@ -167,7 +166,7 @@ test("manual cache-bypass refreshes have a bounded cooldown", async () => {
   assert.equal(h.calls.length, 1);
   assert.match(h.document.nodes.status.textContent, /wait before manually refreshing/i);
 
-  h.advance(MANUAL_REFRESH_COOLDOWN_MS - 1);
+  h.advance(RETRY_MS - 1);
   assert.equal(await h.controller.refresh(true), false);
   assert.equal(h.calls.length, 1);
 
