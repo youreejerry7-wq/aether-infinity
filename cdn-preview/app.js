@@ -158,7 +158,6 @@
         if (!isUsableArchive(data)) throw new Error("archive_invalid");
 
         render(data);
-        // Keep the last good response in memory even when browser storage is unavailable.
         hasDisplayedArchive = true;
         saveCachedArchive(data);
         nextAllowedAt = now() + REFRESH_MS;
@@ -166,7 +165,7 @@
         return true;
       } catch (_) {
         if (hasDisplayedArchive) {
-            setStatus("Archive update unavailable; showing last known-good archive (may be stale). The Flask API was not contacted.");
+            setStatus("Archive update unavailable; showing last good copy (may be stale). The Flask API was not contacted.");
         } else {
           doc.getElementById("summary").textContent = "";
           doc.getElementById("experiments").replaceChildren();
