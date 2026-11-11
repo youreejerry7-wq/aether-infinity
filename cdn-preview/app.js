@@ -8,6 +8,7 @@
   const RETRY_MS = 30 * 1000;
   const REQUEST_TIMEOUT_MS = 10 * 1000;
   const MAX_EXPERIMENTS = 50;
+  const STORAGE_KEY = "aether.archive.preview.v1";
 
   function isUsableArchive(data) {
     const latest = Array.isArray(data) ? data[0] : null;
@@ -28,8 +29,10 @@
     const setTimeoutImpl = options.setTimeoutImpl || setTimeout;
     const clearTimeoutImpl = options.clearTimeoutImpl || clearTimeout;
     const AbortControllerImpl = options.AbortControllerImpl || AbortController;
+    const storage = options.storage || null;
 
     let inFlight = false;
+    let hasSavedArchive = false;
     let nextAllowedAt = -Infinity;
     let timer = null;
 
@@ -45,7 +48,7 @@
       }, delay);
     }
 
-    function render(data) {
+    function render(data, statusMessage) {
       const latest = data[0];
       const timestamp = new Date(latest.time).toLocaleString();
       const summary = doc.getElementById("summary");
@@ -54,7 +57,7 @@
 
       summary.textContent =
         data.length + " archived cycles · latest: " + timestamp;
-      setStatus("Latest archive record loaded");
+      setStatus(statusMessage || "Latest archive record loaded");
       body.replaceChildren();
 
       const experiments = latest.experiments.slice(0, MAX_EXPERIMENTS);
@@ -103,6 +106,30 @@
         errorSummary + interpretation + caution;
     }
 
+    function readCachedArchive() {
+      if (!storage || typeof storage.getItem !== "function") return null;
+      try {
+        const raw = storage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        return isUsableArchive(cached) ? cached : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function saveCachedArchive(data) {
+      if (!storage || typeof storage.setItem !== "function") return false;
+      try {
+        storage.setItem(STORAGE_KEY, JSON.stringify(data));
+        hasSavedArchive = true;
+        return true;
+      } catch (_) {
+        // Storage can be disabled or full; the live network response still works.
+        return false;
+      }
+    }
+
     async function refresh(force) {
       if (doc.hidden || inFlight) return false;
       if (!force && now() < nextAllowedAt) {
@@ -132,16 +159,21 @@
         if (!isUsableArchive(data)) throw new Error("archive_invalid");
 
         render(data);
+        saveCachedArchive(data);
         nextAllowedAt = now() + REFRESH_MS;
         schedule(REFRESH_MS);
         return true;
       } catch (_) {
-        // Do not leave an older cycle looking current after a failed refresh.
-        doc.getElementById("summary").textContent = "";
-        doc.getElementById("experiments").replaceChildren();
-        doc.getElementById("note").textContent =
-          "No current archive data is displayed. Statistical flags are prompts for replication, not discoveries.";
-        setStatus("Archive temporarily unavailable. The Flask API was not contacted.");
+        if (hasSavedArchive) {
+          // Keep the public last-known-good copy visible, but label it as potentially stale.
+          setStatus("Archive update unavailable; showing saved archive (may be stale). The Flask API was not contacted.");
+        } else {
+          doc.getElementById("summary").textContent = "";
+          doc.getElementById("experiments").replaceChildren();
+          doc.getElementById("note").textContent =
+            "No current archive data is displayed. Statistical flags are prompts for replication, not discoveries.";
+          setStatus("Archive temporarily unavailable. The Flask API was not contacted.");
+        }
         nextAllowedAt = now() + RETRY_MS;
         schedule(RETRY_MS);
         return false;
@@ -161,6 +193,12 @@
       });
     }
 
+    const cached = readCachedArchive();
+    if (cached) {
+      hasSavedArchive = true;
+      render(cached, "Showing saved archive while checking for updates");
+    }
+
     return { bind, refresh };
   }
 
@@ -170,6 +208,7 @@
     RETRY_MS,
     REQUEST_TIMEOUT_MS,
     MAX_EXPERIMENTS,
+    STORAGE_KEY,
     isUsableArchive,
     createController
   };
@@ -180,13 +219,16 @@
   }
 
   if (root.document && typeof root.fetch === "function") {
+    let storage = null;
+    try { storage = root.localStorage; } catch (_) {}
     const controller = createController({
       document: root.document,
       fetchImpl: root.fetch.bind(root),
       now: function () { return Date.now(); },
       setTimeoutImpl: root.setTimeout.bind(root),
       clearTimeoutImpl: root.clearTimeout.bind(root),
-      AbortControllerImpl: root.AbortController
+      AbortControllerImpl: root.AbortController,
+      storage
     });
     controller.bind();
     void controller.refresh(false);
