@@ -326,6 +326,8 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         durations = trial_data[name]["durations"]
         unit_variance = unit_variances[name]
         median_observed = statistics.median(durations)
+        rmse = math.sqrt(statistics.mean(error * error for error in errors))
+        theoretical_se = math.sqrt(unit_variance / samples)
         results[name] = {
             "sampling_units_per_replication": samples,
             "sampling_units_per_second": (
@@ -341,17 +343,40 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
                 samples * (2 if name == "antithetic_1d" else 1) / median_observed
                 if median_observed > 0 else None
             ),
-            "rmse": math.sqrt(statistics.mean(error * error for error in errors)),
-            "theoretical_standard_error": math.sqrt(unit_variance / samples),
+            "rmse": rmse,
+            "theoretical_standard_error": theoretical_se,
             "standard_error_basis": (
                 "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
             ),
             "median_observed_seconds": median_observed,
+            "observed_rmse_squared_seconds": rmse * rmse * median_observed,
+            "theoretical_standard_error_squared_seconds": (
+                theoretical_se * theoretical_se * median_observed
+            ),
             "min_observed_seconds": min(durations),
             "max_observed_seconds": max(durations),
             "requested_sampling_units_per_replication": requested_samples_by_method[name],
             "sample_cap_reached": samples < requested_samples_by_method[name],
         }
+
+    # Make the accuracy-versus-time tradeoff explicit for each matched-time
+    # method. Observed RMSE is seed/replicate-specific; theoretical SE is
+    # model-based (with numerical quadrature for antithetic pairs).
+    baseline_observed_error_time = results["circle_hits"]["observed_rmse_squared_seconds"]
+    baseline_theoretical_error_time = (
+        results["circle_hits"]["theoretical_standard_error_squared_seconds"]
+    )
+    for metrics in results.values():
+        metrics["observed_error_time_efficiency_vs_baseline"] = (
+            baseline_observed_error_time / metrics["observed_rmse_squared_seconds"]
+            if metrics["observed_rmse_squared_seconds"] > 0 else None
+        )
+        metrics["theoretical_error_time_efficiency_vs_baseline"] = (
+            baseline_theoretical_error_time
+            / metrics["theoretical_standard_error_squared_seconds"]
+            if metrics["theoretical_standard_error_squared_seconds"] > 0 else None
+        )
+
     return {
         "environment": benchmark_environment(),
         "variance_reference_setup": {
@@ -367,7 +392,10 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "cost is reported separately and not included in trial durations. "
             "Calibrated per-method counts are proportionally scaled only if their aggregate exceeds the shared budget; requested and allocated counts are reported. "
             "Method-specific random draws and integrand evaluations per unit are reported; "
-            "observed RMSE is seed-specific. Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. No quantum, hardware-independent, or universal speed claim."
+            "observed RMSE is seed-specific. Matched-time reports include observed RMSE^2*time "
+            "and model-based SE^2*time efficiency ratios versus the hit-or-miss baseline. "
+            "Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. "
+            "No quantum, hardware-independent, or universal speed claim."
         ),
         "target_seconds_per_replication": budget_seconds,
         "replications": replicates,
