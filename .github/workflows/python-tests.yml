@@ -27,22 +27,29 @@ jobs:
       - name: Verify Flask routes and seeded statistical baselines (offline)
         run: python -m pytest -q tests/test_app.py tests/test_research.py
   archive-diff-guard:
-    # The scheduled bot rewrites this tracked JSON on main. Prevent a
-    # dashboard PR from silently replacing newer simulated history.
+    # The scheduled bot rewrites this tracked JSON on main. Check only changes
+    # authored by this PR, not newer archive commits that arrived on the base.
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - name: Reject research archive content that differs from the current base branch
+      - name: Reject PR-authored research archive changes
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet "origin/${{ github.base_ref }}" HEAD -- data/research.json; then
-            echo "PASS: PR does not alter the scheduled research archive."
+          base_ref="origin/${{ github.base_ref }}"
+          merge_base="$(git merge-base "$base_ref" HEAD)"
+          if [[ -z "$merge_base" ]]; then
+            echo "::error::Could not determine the PR merge base."
+            exit 1
+          fi
+          echo "PR merge base: $merge_base"
+          if git diff --quiet "$merge_base" HEAD -- data/research.json; then
+            echo "PASS: PR does not modify the scheduled research archive."
           else
-            echo "::error::PR archive content differs from the current base branch. Sync the latest main archive before owner review."
+            echo "::error::PR changes data/research.json. Keep generated archive updates on the scheduled workflow only."
             exit 1
           fi
   smoke-live:
