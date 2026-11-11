@@ -10,6 +10,7 @@ const {
   REFRESH_MS,
   STORAGE_KEY,
   RETRY_MS,
+  MANUAL_REFRESH_COOLDOWN_MS,
   createController,
   isUsableArchive
 } = require("../cdn-preview/app.js");
@@ -153,6 +154,27 @@ test("successful refreshes are throttled for five minutes unless manually forced
   await h.controller.refresh(true);
   assert.equal(h.calls.length, 3);
   assert.equal(h.calls[2].options.cache, "reload");
+});
+
+test("manual cache-bypass refreshes have a bounded cooldown", async () => {
+  const h = makeHarness(async () => ({ ok: true, json: async () => archive() }));
+
+  assert.equal(await h.controller.refresh(true), true);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].options.cache, "reload");
+
+  assert.equal(await h.controller.refresh(true), false);
+  assert.equal(h.calls.length, 1);
+  assert.match(h.document.nodes.status.textContent, /wait before manually refreshing/i);
+
+  h.advance(MANUAL_REFRESH_COOLDOWN_MS - 1);
+  assert.equal(await h.controller.refresh(true), false);
+  assert.equal(h.calls.length, 1);
+
+  h.advance(1);
+  assert.equal(await h.controller.refresh(true), true);
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls[1].options.cache, "reload");
 });
 
 test("failed archive reads show a generic message and retry after a bounded delay", async () => {
