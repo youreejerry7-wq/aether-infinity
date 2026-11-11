@@ -32,7 +32,7 @@
     const storage = options.storage || null;
 
     let inFlight = false;
-    let hasSavedArchive = false;
+    let hasDisplayedArchive = false;
     let nextAllowedAt = -Infinity;
     let timer = null;
 
@@ -122,7 +122,7 @@
       if (!storage || typeof storage.setItem !== "function") return false;
       try {
         storage.setItem(STORAGE_KEY, JSON.stringify(data));
-        hasSavedArchive = true;
+        hasDisplayedArchive = true;
         return true;
       } catch (_) {
         return false;
@@ -158,13 +158,15 @@
         if (!isUsableArchive(data)) throw new Error("archive_invalid");
 
         render(data);
+        // Keep the last good response in memory even when browser storage is unavailable.
+        hasDisplayedArchive = true;
         saveCachedArchive(data);
         nextAllowedAt = now() + REFRESH_MS;
         schedule(REFRESH_MS);
         return true;
       } catch (_) {
-        if (hasSavedArchive) {
-            setStatus("Archive update unavailable; showing saved archive (may be stale). The Flask API was not contacted.");
+        if (hasDisplayedArchive) {
+            setStatus("Archive update unavailable; showing last known-good archive (may be stale). The Flask API was not contacted.");
         } else {
           doc.getElementById("summary").textContent = "";
           doc.getElementById("experiments").replaceChildren();
@@ -193,7 +195,7 @@
 
     const cached = readCachedArchive();
     if (cached) {
-      hasSavedArchive = true;
+      hasDisplayedArchive = true;
       render(cached, "Showing saved archive while checking for updates");
     }
 
