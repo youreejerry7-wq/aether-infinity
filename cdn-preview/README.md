@@ -11,6 +11,7 @@ This directory is an isolated, static-only frontend experiment intended to measu
 - Stores only the public archive in browser local storage and renders the last valid copy immediately on repeat visits; failed refreshes retain it with an explicit potentially-stale label.
 - Treats local storage as optional: malformed data, disabled storage, and quota errors never block a fresh network response.
 - Limits rendered experiment rows and bounds each fetch with a timeout.
+- Caps manual cache-bypass refreshes to one request every 30 seconds, even when the five-minute automatic refresh window is active.
 - The interactive Flask app remains separate and unchanged.
 
 ## Staged static-site settings
