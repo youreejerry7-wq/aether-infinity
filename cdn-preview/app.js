@@ -125,7 +125,6 @@
         hasSavedArchive = true;
         return true;
       } catch (_) {
-        // Storage can be disabled or full; the live network response still works.
         return false;
       }
     }
@@ -165,8 +164,7 @@
         return true;
       } catch (_) {
         if (hasSavedArchive) {
-          // Keep the public last-known-good copy visible, but label it as potentially stale.
-          setStatus("Archive update unavailable; showing saved archive (may be stale). The Flask API was not contacted.");
+            setStatus("Archive update unavailable; showing saved archive (may be stale). The Flask API was not contacted.");
         } else {
           doc.getElementById("summary").textContent = "";
           doc.getElementById("experiments").replaceChildren();
