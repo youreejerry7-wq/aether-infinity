@@ -192,6 +192,21 @@ class SpeedLabTests(unittest.TestCase):
                                      metrics["max_observed_seconds"])
                 self.assertTrue(math.isfinite(metrics["rmse"]))
                 self.assertGreater(metrics["theoretical_standard_error"], 0)
+                self.assertAlmostEqual(
+                    metrics["observed_rmse_squared_seconds"],
+                    metrics["rmse"] ** 2 * metrics["median_observed_seconds"],
+                )
+                self.assertAlmostEqual(
+                    metrics["theoretical_standard_error_squared_seconds"],
+                    metrics["theoretical_standard_error"] ** 2
+                    * metrics["median_observed_seconds"],
+                )
+                self.assertGreater(
+                    metrics["observed_error_time_efficiency_vs_baseline"], 0
+                )
+                self.assertGreater(
+                    metrics["theoretical_error_time_efficiency_vs_baseline"], 0
+                )
                 expected_basis = (
                     "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
                 )
@@ -208,6 +223,14 @@ class SpeedLabTests(unittest.TestCase):
                     metrics["integrand_evaluations_per_second"] * metrics["median_observed_seconds"],
                     n * expected_evaluations, places=6,
                 )
+        self.assertAlmostEqual(
+            data["results"]["circle_hits"]["observed_error_time_efficiency_vs_baseline"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            data["results"]["circle_hits"]["theoretical_error_time_efficiency_vs_baseline"],
+            1.0,
+        )
         expected_random_draws = sum(
             (3_000 + data["replications"] * item["sampling_units_per_replication"])
             * (2 if name == "circle_hits" else 1)
