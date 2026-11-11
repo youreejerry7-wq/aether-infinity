@@ -138,8 +138,27 @@ function isUsableArchive(data) {
 }
 let nextArchiveRequestAt = -Infinity;
 let archiveUpdating = false;
+let archiveRefreshTimer = null;
+
+// Schedule only the next required attempt. Successful primary-source reads wait
+// five minutes; a failed/stale fallback schedules the existing 30-second retry.
+function scheduleArchiveRefresh() {
+  if (archiveRefreshTimer !== null) clearTimeout(archiveRefreshTimer);
+  archiveRefreshTimer = null;
+  if (document.hidden) return;
+  const delay = Math.max(0, nextArchiveRequestAt - Date.now());
+  archiveRefreshTimer = setTimeout(() => {
+    archiveRefreshTimer = null;
+    void loadAuto();
+  }, delay);
+}
+
 async function loadAuto() {
-  if (document.hidden || archiveUpdating || Date.now() < nextArchiveRequestAt) return;
+  if (document.hidden || archiveUpdating) return;
+  if (Date.now() < nextArchiveRequestAt) {
+    scheduleArchiveRefresh();
+    return;
+  }
   archiveUpdating = true;
   nextArchiveRequestAt = Date.now() + archiveRefreshMs;
   try {
@@ -262,6 +281,7 @@ async function loadAuto() {
   }
   } finally {
     archiveUpdating = false;
+    scheduleArchiveRefresh();
   }
 }
 
@@ -350,8 +370,7 @@ document.getElementById('run').onclick = async () => {
 
 loadAuto();
 loadInteractive();
-setInterval(loadAuto, archiveRetryMs);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAuto(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void loadAuto(); });
 </script>
 </body>
 </html>
