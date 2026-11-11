@@ -193,7 +193,7 @@ test("saved public archive renders immediately and remains visible when refresh 
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "saved public cycle");
 
   assert.equal(await h.controller.refresh(false), false);
-  assert.match(h.document.nodes.status.textContent, /showing saved archive \(may be stale\)/i);
+  assert.match(h.document.nodes.status.textContent, /showing last good copy \(may be stale\)/i);
   assert.equal(h.document.nodes.experiments.children.length, 1);
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "saved public cycle");
   assert.doesNotMatch(h.document.nodes.status.textContent, /private transport detail/);
@@ -222,7 +222,7 @@ test("invalid or unavailable local storage never blocks a fresh archive response
   assert.equal(fallback.document.nodes.experiments.children[0].children[0].textContent, "network still works");
 });
 
-test("a failed refresh retains the last known-good archive in memory", async () => {
+test("a failed refresh retains the last good copy in memory", async () => {
   let fail = false;
   const h = makeHarness(async () => {
     if (fail) throw new Error("private transport detail");
@@ -239,11 +239,11 @@ test("a failed refresh retains the last known-good archive in memory", async () 
   assert.match(h.document.nodes.summary.textContent, /archived cycles/);
   assert.equal(h.document.nodes.experiments.children.length, 1);
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "last good cycle");
-  assert.match(h.document.nodes.status.textContent, /last known-good archive \(may be stale\)/i);
+  assert.match(h.document.nodes.status.textContent, /last good copy \(may be stale\)/i);
   assert.doesNotMatch(h.document.nodes.status.textContent, /private transport detail/);
 });
 
-test("last known-good archive remains visible when browser storage writes fail", async () => {
+test("last good copy remains visible when browser storage writes fail", async () => {
   let attempt = 0;
   const storage = {
     getItem() { return null; },
@@ -260,7 +260,7 @@ test("last known-good archive remains visible when browser storage writes fail",
 
   h.advance(REFRESH_MS);
   assert.equal(await h.controller.refresh(false), false);
-  assert.match(h.document.nodes.status.textContent, /last known-good archive \(may be stale\)/i);
+  assert.match(h.document.nodes.status.textContent, /last good copy \(may be stale\)/i);
   assert.match(h.document.nodes.summary.textContent, /archived cycles/);
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "in-memory last good");
 });
