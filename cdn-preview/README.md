@@ -8,6 +8,8 @@ This directory is an isolated, static-only frontend experiment intended to measu
 - Does not call `/api/run`, `/api/results`, `/health`, SQLite, Stripe, or any private/customer endpoint.
 - Does not submit experiments, mutate the archive, or access secrets.
 - Uses text-only DOM rendering for archive-supplied strings.
+- Stores only the public archive in browser local storage and renders the last valid copy immediately on repeat visits; failed refreshes retain it with an explicit potentially-stale label.
+- Treats local storage as optional: malformed data, disabled storage, and quota errors never block a fresh network response.
 - Limits rendered experiment rows and bounds each fetch with a timeout.
 - The interactive Flask app remains separate and unchanged.
 
