@@ -6,6 +6,7 @@
     "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json";
   const REFRESH_MS = 5 * 60 * 1000;
   const RETRY_MS = 30 * 1000;
+  const MANUAL_REFRESH_COOLDOWN_MS = 30 * 1000;
   const REQUEST_TIMEOUT_MS = 10 * 1000;
   const MAX_EXPERIMENTS = 50;
   const STORAGE_KEY = "aether.archive.preview.v1";
@@ -33,6 +34,7 @@
 
     let inFlight = false;
     let hasDisplayedArchive = false;
+    let lastManualAt = -Infinity;
     let nextAllowedAt = -Infinity;
     let timer = null;
 
@@ -131,11 +133,16 @@
 
     async function refresh(force) {
       if (doc.hidden || inFlight) return false;
+      if (force && now() - lastManualAt < MANUAL_REFRESH_COOLDOWN_MS) {
+        setStatus("Please wait before manually refreshing again.");
+        return false;
+      }
       if (!force && now() < nextAllowedAt) {
         schedule(nextAllowedAt - now());
         return false;
       }
 
+      if (force) lastManualAt = now();
       inFlight = true;
       const button = doc.getElementById("refresh");
       button.disabled = true;
@@ -205,6 +212,7 @@
     ARCHIVE_URL,
     REFRESH_MS,
     RETRY_MS,
+    MANUAL_REFRESH_COOLDOWN_MS,
     REQUEST_TIMEOUT_MS,
     MAX_EXPERIMENTS,
     STORAGE_KEY,
