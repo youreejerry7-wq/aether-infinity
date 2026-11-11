@@ -1,4 +1,4 @@
-/* Read-only CDN preview. Deliberately never calls the Flask API. */
+/* Read-only preview; no Flask calls. */
 (function (root) {
   "use strict";
 
@@ -134,7 +134,7 @@
     async function refresh(force) {
       if (doc.hidden || inFlight) return false;
       if (force && now() - lastManualAt < MANUAL_REFRESH_COOLDOWN_MS) {
-        setStatus("Please wait before manually refreshing again.");
+        setStatus("Wait before refreshing again.");
         return false;
       }
       if (!force && now() < nextAllowedAt) {
@@ -153,10 +153,7 @@
       );
 
       try {
-        // Stable URL + normal browser caching; no cache-busting query or no-store.
         const response = await fetchImpl(ARCHIVE_URL, {
-          // Automatic refreshes honor the HTTP cache; an explicit button click
-          // bypasses a still-fresh cached response so it actually refreshes.
           cache: force ? "reload" : "default",
           signal: controller.signal
         });
@@ -212,7 +209,6 @@
     ARCHIVE_URL,
     REFRESH_MS,
     RETRY_MS,
-    MANUAL_REFRESH_COOLDOWN_MS,
     REQUEST_TIMEOUT_MS,
     MAX_EXPERIMENTS,
     STORAGE_KEY,
