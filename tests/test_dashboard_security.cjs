@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'templates/index.html'), 'utf8');
+assert.doesNotMatch(html, /\.badge-discovery\b/, 'Candidate styling must not use discovery terminology');
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(match, 'Expected dashboard script');
 class Element {
