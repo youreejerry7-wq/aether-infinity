@@ -164,7 +164,7 @@ test("manual cache-bypass refreshes have a bounded cooldown", async () => {
 
   assert.equal(await h.controller.refresh(true), false);
   assert.equal(h.calls.length, 1);
-  assert.match(h.document.nodes.status.textContent, /wait before manually refreshing/i);
+  assert.match(h.document.nodes.status.textContent, /wait before refreshing again/i);
 
   h.advance(RETRY_MS - 1);
   assert.equal(await h.controller.refresh(true), false);
