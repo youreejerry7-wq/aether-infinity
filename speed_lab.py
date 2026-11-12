@@ -236,13 +236,16 @@ def allocate_sampling_budget(requested_samples, replicates, calibration_units):
         raise ValueError("requested sampling units must be positive")
     scale = available_per_replication / requested_total
     allocated = {
-        name: max(100, math.floor(samples * scale))
+        # Keep sub-100 requests at their requested size; the 100-unit floor
+        # applies only when the caller requested at least 100 units.
+        name: min(samples, max(100, math.floor(samples * scale)))
         for name, samples in requested_samples.items()
     }
     while sum(allocated.values()) > available_per_replication:
         largest = max(allocated, key=allocated.get)
-        if allocated[largest] <= 100:
-            raise ValueError("sampling budget is too small for minimum method samples")
+        minimum = min(100, requested_samples[largest])
+        if allocated[largest] <= minimum:
+            raise ValueError("sampling budget is too small for minimum requested method samples")
         allocated[largest] -= 1
     return allocated, scale
 

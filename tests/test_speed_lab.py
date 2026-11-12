@@ -305,6 +305,21 @@ class SpeedLabTests(unittest.TestCase):
         self.assertLess(MAX_TOTAL_SAMPLES - total, replicates * len(METHODS))
         self.assertGreaterEqual(min(allocated.values()), 100)
 
+    def test_shared_budget_never_inflates_small_requested_method(self):
+        requested = {
+            "circle_hits": 1,
+            "conditional_1d": MAX_TOTAL_SAMPLES,
+            "antithetic_1d": MAX_TOTAL_SAMPLES,
+        }
+        allocated, scale = allocate_sampling_budget(requested, 1, 9_000)
+        self.assertLess(scale, 1.0)
+        self.assertEqual(allocated["circle_hits"], 1)
+        for name, count in allocated.items():
+            self.assertLessEqual(count, requested[name])
+        self.assertGreaterEqual(allocated["conditional_1d"], 100)
+        self.assertGreaterEqual(allocated["antithetic_1d"], 100)
+        self.assertLessEqual(sum(allocated.values()), MAX_TOTAL_SAMPLES - 9_000)
+
     def test_matched_time_rejects_unbounded_inputs(self):
         for kwargs in (
             {"budget_seconds": 0},
