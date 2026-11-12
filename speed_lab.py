@@ -220,8 +220,8 @@ def allocate_sampling_budget(requested_samples, replicates, calibration_units):
             or not 0 <= calibration_units <= MAX_TOTAL_SAMPLES):
         raise ValueError("calibration_units must be an integer within the shared sampling budget")
     for name, samples in requested_samples.items():
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError("sampling-budget method names must be nonempty strings")
+        if name not in METHODS:
+            raise ValueError(f"unknown benchmark method: {name!r}")
         if (isinstance(samples, bool) or not isinstance(samples, int)
                 or not 1 <= samples <= MAX_TOTAL_SAMPLES):
             raise ValueError("requested sampling units must be positive bounded integers")
