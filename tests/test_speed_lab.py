@@ -87,12 +87,13 @@ class SpeedLabTests(unittest.TestCase):
             metrics["conditional_1d"]["theoretical_standard_error"],
             metrics["circle_hits"]["theoretical_standard_error"],
         )
-        # Deterministic quadrature of the correlated pair's second moment.
-        # Reference is independently converged to ~0.10972585 per pair.
+        # Independent 50-digit integration gives the correlated pair variance
+        # 0.1097258464920044562. The 16,384-point midpoint rule differs by
+        # about 6.57e-7, so keep the regression tolerance tight but realistic.
         self.assertAlmostEqual(
             metrics["antithetic_1d"]["theoretical_standard_error"] ** 2 * 1000,
-            0.10972585,
-            delta=0.00001,
+            0.10972584649200446,
+            delta=0.000001,
         )
         self.assertLess(
             metrics["antithetic_1d"]["theoretical_standard_error"],
