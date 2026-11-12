@@ -386,6 +386,7 @@ test("initial HTML stays lightweight and avoids third-party render-blocking asse
   assert.ok(policy[1].includes("object-src 'none'"));
   assert.ok(!policy[1].includes("unsafe-eval"));
   assert.match(html, /<meta name="referrer" content="no-referrer">/i);
+  assert.match(html, /<meta name="robots" content="noindex, nofollow">/i);
   assert.doesNotMatch(html, /@import\s+url|url\(\s*["']?https?:/i);
 });
 
