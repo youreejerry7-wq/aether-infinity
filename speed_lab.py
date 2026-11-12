@@ -208,12 +208,24 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
 
 
 def allocate_sampling_budget(requested_samples, replicates, calibration_units):
-    """Proportionally scale calibrated counts only when their aggregate exceeds the shared cap."""
-    if not requested_samples:
-        raise ValueError("requested_samples must not be empty")
+    """Proportionally scale validated method counts within the shared compute cap."""
+    if not isinstance(requested_samples, dict) or not requested_samples:
+        raise ValueError("requested_samples must be a nonempty dictionary")
+    if len(requested_samples) > len(METHODS):
+        raise ValueError("requested_samples cannot exceed the number of benchmark methods")
+    if (isinstance(replicates, bool) or not isinstance(replicates, int)
+            or not 1 <= replicates <= MAX_REPLICATES):
+        raise ValueError(f"replicates must be an integer between 1 and {MAX_REPLICATES:,}")
+    if (isinstance(calibration_units, bool) or not isinstance(calibration_units, int)
+            or not 0 <= calibration_units <= MAX_TOTAL_SAMPLES):
+        raise ValueError("calibration_units must be an integer within the shared sampling budget")
+    for name, samples in requested_samples.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("sampling-budget method names must be nonempty strings")
+        if (isinstance(samples, bool) or not isinstance(samples, int)
+                or not 1 <= samples <= MAX_TOTAL_SAMPLES):
+            raise ValueError("requested sampling units must be positive bounded integers")
     available_units = MAX_TOTAL_SAMPLES - calibration_units
-    if replicates <= 0 or available_units < 0:
-        raise ValueError("invalid sampling-budget inputs")
     # Divide the shared remaining budget across replicates, not equally per method;
     # unused capacity from faster methods remains available to the others.
     available_per_replication = available_units // replicates

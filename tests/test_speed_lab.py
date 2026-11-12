@@ -253,6 +253,33 @@ class SpeedLabTests(unittest.TestCase):
         self.assertGreater(data["sampling_budget_scale_factor"], 0.0)
         self.assertLessEqual(data["sampling_budget_scale_factor"], 1.0)
 
+    def test_shared_budget_rejects_invalid_inputs(self):
+        invalid_cases = (
+            ({}, 1, 0),
+            ([], 1, 0),
+            ({"circle_hits": 0}, 1, 0),
+            ({"circle_hits": -1}, 1, 0),
+            ({"circle_hits": True}, 1, 0),
+            ({"circle_hits": 1.5}, 1, 0),
+            ({"circle_hits": MAX_TOTAL_SAMPLES + 1}, 1, 0),
+            ({"circle_hits": 1}, 0, 0),
+            ({"circle_hits": 1}, True, 0),
+            ({"circle_hits": 1}, MAX_REPLICATES + 1, 0),
+            ({"circle_hits": 1}, 1, -1),
+            ({"circle_hits": 1}, 1, MAX_TOTAL_SAMPLES + 1),
+            ({"": 1}, 1, 0),
+            ({1: 1}, 1, 0),
+            ({"a": 1, "b": 1, "c": 1, "d": 1}, 1, 0),
+        )
+        for requested, replicates, calibration_units in invalid_cases:
+            with self.subTest(
+                requested=requested,
+                replicates=replicates,
+                calibration_units=calibration_units,
+            ):
+                with self.assertRaises(ValueError):
+                    allocate_sampling_budget(requested, replicates, calibration_units)
+
     def test_shared_budget_scales_aggregate_only_when_needed(self):
         requested = {
             "circle_hits": 32_431,
