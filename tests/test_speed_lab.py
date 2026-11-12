@@ -268,6 +268,7 @@ class SpeedLabTests(unittest.TestCase):
             ({"circle_hits": 1}, 1, -1),
             ({"circle_hits": 1}, 1, MAX_TOTAL_SAMPLES + 1),
             ({"": 1}, 1, 0),
+            ({"unknown_method": 1}, 1, 0),
             ({1: 1}, 1, 0),
             ({"a": 1, "b": 1, "c": 1, "d": 1}, 1, 0),
         )
