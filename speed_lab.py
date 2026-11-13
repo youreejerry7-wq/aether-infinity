@@ -292,6 +292,9 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         for name in method_names
         for trial in range(3)
     ]
+    # Include order generation, RNG construction, loop overhead, and estimator
+    # calls in the full calibration wall-clock measurement.
+    calibration_wall_start = time.perf_counter()
     calibration_order_rng = random.Random(seed ^ 0xCA1B4A7E)
     calibration_order_rng.shuffle(calibration_order)
     for name, trial in calibration_order:
@@ -300,7 +303,9 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         start = time.perf_counter()
         METHODS[name](1000, rng)
         calibration_times_by_method[name].append(time.perf_counter() - start)
-    calibration_seconds = sum(
+    calibration_wall_seconds = time.perf_counter() - calibration_wall_start
+    # Sum only timed estimator calls so setup overhead remains distinguishable.
+    calibration_estimator_seconds = sum(
         sum(times) for times in calibration_times_by_method.values()
     )
 
@@ -403,8 +408,9 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         "reference": "pi",
         "methodology": (
             "Measured trials with separately calibrated sampling-unit counts near "
-            "a common wall-time target, not identical elapsed time. Calibration "
-            "cost is reported separately and not included in trial durations. "
+            "a common wall-time target, not identical elapsed time. Full calibration "
+            "wall time (including order generation, RNG setup, and estimator calls) "
+            "is reported separately from estimator-only calibration time and trial durations. "
             "Calibrated per-method counts are proportionally scaled only if their aggregate exceeds the shared budget; requested and allocated counts are reported. "
             "Method-specific random draws and integrand evaluations per unit are reported; "
             "observed RMSE is seed-specific. Matched-time reports include observed RMSE^2*time "
@@ -417,7 +423,8 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         "seed": seed,
         "calibration_execution_order": calibration_order,
         "trial_execution_order": trial_order,
-        "calibration_seconds_total": calibration_seconds,
+        "calibration_wall_seconds": calibration_wall_seconds,
+        "calibration_estimator_seconds": calibration_estimator_seconds,
         "calibration_sampling_units": calibration_units,
         "total_sampling_units_including_calibration": (
             calibration_units + replicates * sum(
