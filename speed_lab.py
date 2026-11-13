@@ -72,12 +72,14 @@ METHODS = {
 
 
 def antithetic_unit_variance_midpoint(intervals=ANTITHETIC_VARIANCE_INTERVALS):
-    """Approximate Var[2(sqrt(1-X^2)+sqrt(1-(1-X)^2))] for X~U(0,1).
+    """Approximate Var[2(sqrt(1-X^2)+sqrt(1-(1-X)^2)] for X~U(0,1).
 
     Independent antithetic *pairs* are sampling units. Their two function
     evaluations are correlated, so independent-function SE formulas are wrong.
     This fixed-grid quadrature is deterministic, not an exact analytic result.
     """
+    if isinstance(intervals, bool) or not isinstance(intervals, int) or intervals < 1:
+        raise ValueError("intervals must be a positive integer")
     integral = math.fsum(
         math.sqrt((1.0 - (x := (i + 0.5) / intervals) ** 2)
                   * (1.0 - (1.0 - x) ** 2))
