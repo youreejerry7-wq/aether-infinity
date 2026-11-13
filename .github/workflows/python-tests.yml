@@ -1,0 +1,88 @@
+name: AETHER offline Python regression tests
+on:
+  pull_request:
+    paths:
+      - 'app.py'
+      - 'research.py'
+      - 'tests/test_app.py'
+      - 'tests/test_research.py'
+      - 'requirements.txt'
+      - 'data/research.json'
+      - '.github/workflows/python-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install existing dependencies and test runner
+        run: python -m pip install -r requirements.txt pytest
+      - name: Verify Flask routes and seeded statistical baselines (offline)
+        run: python -m pytest -q tests/test_app.py tests/test_research.py
+  archive-diff-guard:
+    # The scheduled bot rewrites this tracked JSON on main. Prevent a
+    # dashboard PR from silently replacing newer simulated history.
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Reject research archive content that differs from the current base branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet "origin/${{ github.base_ref }}" HEAD -- data/research.json; then
+            echo "PASS: PR does not alter the scheduled research archive."
+          else
+            echo "::error::PR archive content differs from the current base branch. Sync the latest main archive before owner review."
+            exit 1
+          fi
+  smoke-live:
+    # Observes the existing production service, NOT unmerged PR code.
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Measure live AETHER health, homepage, and public archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Request the homepage first: a prior /health call would wake the free service and hide first-page latency.
+          for endpoint in homepage health archive; do
+            case "$endpoint" in
+              health) url="https://aether-infinity.onrender.com/health" ;;
+              homepage) url="https://aether-infinity.onrender.com/" ;;
+              archive) url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json" ;;
+            esac
+            output="/tmp/aether-smoke-$endpoint"
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o "$output" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r code ttfb total bytes <<< "$metrics"
+            echo "GET $endpoint: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+            test "$code" = 200
+            case "$endpoint" in
+              health) python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$output" ;;
+              homepage) grep -q 'AETHER' "$output" ;;
+              archive) python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); assert isinstance(data,list) and data; print("Simulated cycles:",len(data))' "$output" ;;
+            esac
+          done
+          # First-in-job is not necessarily a cold start. Record sequential follow-ups
+          # to separate transient wake-up latency from steady-state response time.
+          for endpoint in health homepage; do
+            case "$endpoint" in
+              health) url="https://aether-infinity.onrender.com/health" ;;
+              homepage) url="https://aether-infinity.onrender.com/" ;;
+            esac
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o /dev/null -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r code ttfb total bytes <<< "$metrics"
+            echo "GET followup-$endpoint: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+            test "$code" = 200
+          done
