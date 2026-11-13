@@ -39,7 +39,7 @@ test("base-branch archive advances do not look like PR archive edits", () => {
     git(repo, "config", "user.name", "AETHER test");
     git(repo, "config", "user.email", "aether-test@example.invalid");
     write(repo, "data/research.json", "base archive\\n");
-    commit(repo, "base archive");
+    const baseSha = commit(repo, "base archive");
 
     git(repo, "switch", "-c", "review/pr");
     write(repo, "cdn-preview/index.html", "preview\\n");
@@ -49,7 +49,16 @@ test("base-branch archive advances do not look like PR archive edits", () => {
     write(repo, "data/research.json", "new scheduled cycle\\n");
     const currentBase = commit(repo, "scheduled archive update");
 
-    assert.equal(archiveDiffExitCode(repo, currentBase, prHead), 0);
+    // Mirror a review-branch sync: the PR head contains the current base
+    // branch, while the PR event's captured base SHA can still be stale.
+    git(repo, "switch", "review/pr");
+    git(repo, "merge", "--no-ff", "main", "-m", "sync current base branch");
+    const syncedPrHead = git(repo, "rev-parse", "HEAD");
+
+    assert.equal(archiveDiffExitCode(repo, currentBase, syncedPrHead), 0);
+    // The old event base would falsely attribute the base branch's archive
+    // update to the PR, which is why CI must compare against current origin/main.
+    assert.equal(archiveDiffExitCode(repo, baseSha, syncedPrHead), 1);
   } finally {
     fs.rmSync(repo, { recursive: true, force: true });
   }
