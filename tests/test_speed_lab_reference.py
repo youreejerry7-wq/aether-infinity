@@ -49,6 +49,11 @@ class AntitheticVarianceReferenceTests(unittest.TestCase):
             with self.subTest(intervals=intervals), self.assertRaises(ValueError):
                 independent_variance_reference(intervals)
 
+    def test_midpoint_variance_rejects_invalid_resolution(self):
+        for intervals in (0, -1, 1.5, True):
+            with self.subTest(intervals=intervals), self.assertRaises(ValueError):
+                antithetic_unit_variance_midpoint(intervals)
+
 
 if __name__ == "__main__":
     unittest.main()
