@@ -10,6 +10,7 @@ from speed_lab import (
     MAX_TOTAL_SAMPLES,
     METHODS,
     allocate_sampling_budget,
+    _calibrated_sample_counts,
     antithetic_1d,
     benchmark,
     benchmark_matched_time,
@@ -19,6 +20,12 @@ from speed_lab import (
 
 
 class SpeedLabTests(unittest.TestCase):
+    def test_per_method_calibration_cap_is_reported_separately(self):
+        calibrated, capped = _calibrated_sample_counts(0.25, 0.0005)
+        self.assertEqual(calibrated, 500_000)
+        self.assertEqual(capped, 100_000)
+        self.assertGreater(calibrated, capped)
+
     def test_methods_have_reasonable_pi_estimates(self):
         for name, method in METHODS.items():
             with self.subTest(name=name):
@@ -190,6 +197,18 @@ class SpeedLabTests(unittest.TestCase):
                 self.assertEqual(
                     metrics["sample_cap_reached"],
                     n < metrics["requested_sampling_units_per_replication"],
+                )
+                self.assertEqual(
+                    metrics["shared_budget_scaled"],
+                    n < metrics["requested_sampling_units_per_replication"],
+                )
+                self.assertEqual(
+                    metrics["per_method_sample_cap_reached"],
+                    metrics["calibrated_sampling_units_per_replication"] > 100_000,
+                )
+                self.assertGreaterEqual(
+                    metrics["calibrated_sampling_units_per_replication"],
+                    metrics["requested_sampling_units_per_replication"],
                 )
                 self.assertGreater(metrics["median_observed_seconds"], 0)
                 self.assertLessEqual(metrics["min_observed_seconds"],
