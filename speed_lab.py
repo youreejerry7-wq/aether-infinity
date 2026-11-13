@@ -18,6 +18,7 @@ import time
 
 MAX_TOTAL_SAMPLES = 2_000_000
 MAX_REPLICATES = 1_000
+MAX_SAMPLES_PER_METHOD = 100_000
 ANTITHETIC_VARIANCE_INTERVALS = 16_384
 
 
@@ -250,6 +251,14 @@ def allocate_sampling_budget(requested_samples, replicates, calibration_units):
     return allocated, scale
 
 
+def _calibrated_sample_counts(budget_seconds, calibration_median):
+    """Return the uncapped calibrated target and the per-method capped request."""
+    if not math.isfinite(calibration_median) or calibration_median <= 0:
+        raise ValueError("calibration_median must be finite and positive")
+    calibrated = max(100, round(1000 * budget_seconds / calibration_median))
+    return calibrated, min(MAX_SAMPLES_PER_METHOD, calibrated)
+
+
 def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     """Calibrate then *measure* independent trials near a common time target.
 
@@ -309,13 +318,15 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         sum(times) for times in calibration_times_by_method.values()
     )
 
+    calibrated_samples_by_method = {}
     requested_samples_by_method = {}
     for name, calibration_times in calibration_times_by_method.items():
         calibration_median = statistics.median(calibration_times)
-        requested_samples_by_method[name] = min(
-            100_000,
-            max(100, round(1000 * budget_seconds / calibration_median)),
+        calibrated, capped_request = _calibrated_sample_counts(
+            budget_seconds, calibration_median
         )
+        calibrated_samples_by_method[name] = calibrated
+        requested_samples_by_method[name] = capped_request
     samples_by_method, budget_scale_factor = allocate_sampling_budget(
         requested_samples_by_method, replicates, calibration_units
     )
@@ -375,7 +386,14 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             ),
             "min_observed_seconds": min(durations),
             "max_observed_seconds": max(durations),
+            # Distinguish the per-method 100k ceiling from global budget scaling.
+            "calibrated_sampling_units_per_replication": calibrated_samples_by_method[name],
             "requested_sampling_units_per_replication": requested_samples_by_method[name],
+            "per_method_sample_cap_reached": (
+                calibrated_samples_by_method[name] > MAX_SAMPLES_PER_METHOD
+            ),
+            "shared_budget_scaled": samples < requested_samples_by_method[name],
+            # Retain the existing key for compatibility; it means shared-budget scaling.
             "sample_cap_reached": samples < requested_samples_by_method[name],
         }
 
