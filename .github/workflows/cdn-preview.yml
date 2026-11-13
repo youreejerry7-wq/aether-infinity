@@ -1,0 +1,84 @@
+name: AETHER CDN preview checks
+on:
+  pull_request:
+    paths:
+      - 'cdn-preview/**'
+      - 'tests/test_cdn_preview.cjs'
+      - 'tests/test_archive_diff_guard.cjs'
+      - 'tests/measure_public_latency.py'
+      - 'tests/test_measure_public_latency.py'
+      - 'data/research.json'
+      - '.github/workflows/cdn-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Test archive guard against base-branch updates
+        run: node --test tests/test_archive_diff_guard.cjs
+      - name: Reject changes to the scheduled research archive
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Compare the PR's own commits, not a moving base branch against a
+          # possibly older merge checkout. Hourly archive updates on main must
+          # not create false failures for a read-only preview PR.
+          if git diff --quiet "${PR_BASE_SHA}...${PR_HEAD_SHA}" -- data/research.json; then
+            echo "PASS: PR does not modify the scheduled research archive."
+          else
+            echo "::error::This PR modifies data/research.json; archive data is maintained only by the scheduled research workflow."
+            exit 1
+          fi
+      - name: Test cache, throttling, visibility, bounds, and safe rendering
+        run: node --test tests/test_cdn_preview.cjs
+      - name: Test compressed and identity HTTP body decoding
+        run: python -m unittest discover -s tests -p 'test_measure_public_latency.py'
+      - name: Verify the public archive supports browser cross-origin reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json"
+          curl --fail --silent --show-error --location \
+            --dump-header "$RUNNER_TEMP/archive.headers" \
+            --output "$RUNNER_TEMP/research.json" \
+            --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\\n' \
+            "$archive_url"
+          # The frontend uses cache: "default"; require a positive origin cache lifetime.
+          grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/archive.headers"
+          grep -Ei '^cache-control:|^etag:' "$RUNNER_TEMP/archive.headers"
+          grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
+          python - "$RUNNER_TEMP/research.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              archive = json.load(handle)
+          assert isinstance(archive, list) and archive, "archive must be a nonempty list"
+          latest = archive[0]
+          assert isinstance(latest, dict), "latest cycle must be an object"
+          assert isinstance(latest.get("experiments"), list), "latest experiments must be a list"
+          print(f"Archive JSON valid: {len(archive)} cycles; latest timestamp present={bool(latest.get('time'))}")
+          PY
+          node - "$RUNNER_TEMP/research.json" <<'NODE'
+          const fs = require("node:fs");
+          const { isUsableArchive } = require("./cdn-preview/app.js");
+          const archive = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (!isUsableArchive(archive)) {
+            throw new Error("CDN preview rejects the live public archive schema");
+          }
+          console.log(`CDN preview accepts live archive schema (${archive.length} cycles)`);
+          NODE
+      - name: Measure first and repeat AETHER latency and payloads (read-only)
+        run: python3 tests/measure_public_latency.py
