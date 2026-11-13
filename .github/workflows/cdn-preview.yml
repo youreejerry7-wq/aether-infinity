@@ -133,6 +133,15 @@ jobs:
           fi
 
           metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+            -o "$RUNNER_TEMP/cdn-preview-readme.md" \
+            -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/README.md")
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "static_readme HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = "200"
+          grep -q 'Current isolated Render staging preview' "$RUNNER_TEMP/cdn-preview-readme.md"
+          grep -q 'SKIP_INSTALL_DEPS=true' "$RUNNER_TEMP/cdn-preview-readme.md"
+
+          metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
             -o "$RUNNER_TEMP/cdn-preview-repeat.html" \
             -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/")
           read -r code ttfb total bytes <<< "$metrics"
