@@ -113,13 +113,22 @@ jobs:
           grep -q 'script src="./app.js"' "$RUNNER_TEMP/cdn-preview.html"
           grep -Ei '^content-type:|^cache-control:' "$RUNNER_TEMP/cdn-preview.headers" || true
 
-          metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
-            -o "$RUNNER_TEMP/cdn-preview.js" \
-            -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/app.js")
-          read -r code ttfb total bytes <<< "$metrics"
-          echo "static_js HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
-          test "$code" = "200"
-          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
+          asset_path=""
+          for candidate in /app.js /cdn-preview/app.js /cdn-preview/cdn-preview/app.js; do
+            metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+              -o "$RUNNER_TEMP/cdn-preview.js" \
+              -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base$candidate" || true)
+            read -r code ttfb total bytes <<< "${metrics:-}"
+            echo "static_asset path=$candidate HTTP=${code:-000} ttfb_seconds=${ttfb:-n/a} total_seconds=${total:-n/a} bytes=${bytes:-0}"
+            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"; then
+              asset_path="$candidate"
+              break
+            fi
+          done
+          if [ -z "$asset_path" ]; then
+            echo "::error::The deployed static site did not expose app.js at the expected root or nested paths."
+            exit 1
+          fi
           if grep -Eq '/api/run|/api/results|/health' "$RUNNER_TEMP/cdn-preview.js"; then
             echo "::error::Static preview unexpectedly references Flask API routes."
             exit 1
