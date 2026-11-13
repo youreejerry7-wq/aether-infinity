@@ -430,23 +430,23 @@ test("concurrent refresh attempts do not start duplicate archive requests", asyn
 
 test("static preview keeps its dependency surface small and same-origin", () => {
   const html = fs.readFileSync(path.join(__dirname, "../cdn-preview/index.html"), "utf8");
-  const scriptSources = [...html.matchAll(/<script\\b[^>]*\\bsrc=["']([^"']+)["'][^>]*>/gi)]
+  const scriptSources = [...html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)]
     .map((match) => match[1]);
-  const stylesheetLinks = [...html.matchAll(/<link\\b[^>]*\\brel=["']stylesheet["'][^>]*>/gi)];
-  const preconnects = [...html.matchAll(/<link\\b[^>]*\\brel=["']preconnect["'][^>]*>/gi)]
+  const stylesheetLinks = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)];
+  const preconnects = [...html.matchAll(/<link\b[^>]*\brel=["']preconnect["'][^>]*>/gi)]
     .map((match) => match[0]);
 
   // Keep first paint independent of third-party scripts, fonts, and stylesheets.
   assert.deepEqual(scriptSources, ["./app.js"]);
-  assert.match(html, /<script src=["']\\.\\/app\\.js["'] defer>/i);
+  assert.match(html, /<script src=["']\.\/app\.js["'] defer>/i);
   assert.equal(stylesheetLinks.length, 0);
   assert.equal(preconnects.length, 1);
-  assert.match(preconnects[0], /href=["']https:\\/\\/raw\\.githubusercontent\\.com["']/i);
+  assert.match(preconnects[0], /href=["']https:\/\/raw\.githubusercontent\.com["']/i);
 
   // The only cross-origin network destination is the public read-only archive.
   assert.match(html, /Content-Security-Policy/);
   assert.match(html, /default-src 'none'/);
   assert.match(html, /script-src 'self'/);
-  assert.match(html, /connect-src https:\\/\\/raw\\.githubusercontent\\.com/);
-  assert.doesNotMatch(html, /fonts\\.googleapis|fonts\\.gstatic|googletagmanager|doubleclick/i);
+  assert.match(html, /connect-src https:\/\/raw\.githubusercontent\.com/);
+  assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic|googletagmanager|doubleclick/i);
 });
