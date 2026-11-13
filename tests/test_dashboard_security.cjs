@@ -19,6 +19,7 @@ const ids = ['auto-status','auto-summary','auto-table','auto-experiments',
 const nodes = Object.fromEntries(ids.map(id => [id, new Element()]));
 const listeners = {};
 const intervals = [];
+const scheduledTasks = [];
 const requests = [];
 let clockMs = 0;
 class FakeDate extends Date { static now() { return clockMs; } }
@@ -108,10 +109,12 @@ const fetch = async (url, options) => {
 const timeoutTasks = [];
 const fakeSetTimeout = (fn, ms) => {
   const task = { fn, ms, active: true };
-  timeoutTasks.push(task);
+  if ([15000, 60000, 90000].includes(ms)) timeoutTasks.push(task);
+  else scheduledTasks.push(task);
   return task;
 };
 const fakeClearTimeout = task => { task.active = false; };
+const activeScheduledTimers = () => scheduledTasks.filter(task => task.active);
 const context = {
   document, fetch, Date: FakeDate, AbortController,
   setInterval: (fn, ms) => intervals.push({fn, ms}),
@@ -125,19 +128,25 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(archiveRequests().length, 1, 'Load GitHub archive first, not stale deployed copy');
   assert.equal(archiveRequests()[0].url, 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json');
   assert.equal(archiveRequests()[0].options.cache, 'default', 'Allow browser caching');
-  assert.equal(intervals.length, 1);
-  assert.equal(intervals[0].ms, 30000, '30-second wakeup allows bounded retries; successful fetches remain throttled for five minutes');
+  assert.equal(intervals.length, 0, 'Archive polling must not use a recurring interval');
+  assert.equal(activeScheduledTimers().length, 1);
+  assert.equal(activeScheduledTimers()[0].ms, 300000,
+    'A successful primary archive read schedules one five-minute timer');
   assert.equal(typeof listeners.visibilitychange, 'function');
   await context.loadAuto();
   assert.equal(archiveRequests().length, 1, 'Repeated visible refresh is throttled');
+  assert.equal(activeScheduledTimers().length, 1, 'Repeated calls must not create duplicate timers');
   document.hidden = true;
+  listeners.visibilitychange();
   clockMs += 300000;
+  assert.equal(activeScheduledTimers().length, 0, 'Hidden tabs cancel the pending wakeup timer');
   await context.loadAuto();
   assert.equal(archiveRequests().length, 1, 'Hidden tabs must not poll');
   document.hidden = false;
   listeners.visibilitychange();
   await settle();
   assert.equal(archiveRequests().length, 2, 'Resume when tab is visible after interval');
+  assert.equal(activeScheduledTimers().length, 1, 'Visible recovery schedules exactly one next refresh');
   const status = nodes['val-status'].children[0];
   assert.equal(status.textContent, hostile, 'Untrusted status must remain inert text');
   assert.equal(nodes['auto-experiments'].children.length, 1);
@@ -240,11 +249,17 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes['auto-experiments'].children.length, 0);
   assert.equal(nodes['auto-errors'].children.length, 0);
   assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+  assert.equal(activeScheduledTimers().length, 1);
+  assert.equal(activeScheduledTimers()[0].ms, 30000,
+    'A failed primary and fallback schedule one bounded 30-second retry');
   const requestsAfterFailure = archiveRequests().length;
   clockMs += 29999;
   await context.loadAuto();
   assert.equal(archiveRequests().length, requestsAfterFailure,
     'Do not retry a failed archive before 30 seconds');
+  assert.equal(activeScheduledTimers().length, 1);
+  assert.equal(activeScheduledTimers()[0].ms, 1,
+    'The single retry timer tracks only the remaining delay');
   clockMs += 1;
   failArchive = false;
   await context.loadAuto();
