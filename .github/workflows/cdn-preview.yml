@@ -4,6 +4,7 @@ on:
     paths:
       - 'cdn-preview/**'
       - 'tests/test_cdn_preview.cjs'
+      - 'tests/test_archive_diff_guard.cjs'
       - 'tests/measure_public_latency.py'
       - 'tests/test_measure_public_latency.py'
       - 'data/research.json'
@@ -17,19 +18,28 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
+      - name: Test archive guard against base-branch updates
+        run: node --test tests/test_archive_diff_guard.cjs
       - name: Reject changes to the scheduled research archive
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -euo pipefail
-          base_ref="${GITHUB_BASE_REF:-main}"
-          git fetch --no-tags --depth=1 origin "+refs/heads/${base_ref}:refs/remotes/origin/${base_ref}"
-          if git diff --quiet "origin/${base_ref}" HEAD -- data/research.json; then
-            echo "PASS: PR does not alter the scheduled research archive."
+          # Compare the PR's own commits, not a moving base branch against a
+          # possibly older merge checkout. Hourly archive updates on main must
+          # not create false failures for a read-only preview PR.
+          if git diff --quiet "${PR_BASE_SHA}...${PR_HEAD_SHA}" -- data/research.json; then
+            echo "PASS: PR does not modify the scheduled research archive."
           else
-            echo "::error::PR archive content differs from the current base branch. Sync the latest main archive before review."
+            echo "::error::This PR modifies data/research.json; archive data is maintained only by the scheduled research workflow."
             exit 1
           fi
       - name: Test cache, throttling, visibility, bounds, and safe rendering
