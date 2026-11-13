@@ -36,3 +36,18 @@ node --test tests/test_cdn_preview.cjs
 ```
 
 The GitHub Actions workflow also performs a read-only HTTP/CORS check against the public archive. No new paid dependencies or services are introduced by this code.
+
+## Current isolated Render staging preview
+
+- URL: https://aether-cdn-preview.onrender.com
+- Render service: `srv-dbrh49rtqb8s73ei5o4g` (separate from the production Flask service)
+- Build command: `echo "No build step required"`
+- Publish directory: `cdn-preview`
+- Render environment: `SKIP_INSTALL_DEPS=true` so the static site does not install the repository's unrelated Python requirements.
+
+Two GitHub-hosted runner observations on 2026-11-13 returned HTTP 200:
+- Static HTML: **190–230 ms**, 3,042 bytes
+- Static `app.js`: **148–279 ms**, 8,159 bytes
+- Immediate repeat HTML: **49–65 ms**, 3,042 bytes
+
+These are point observations, not a controlled cold-start or global CDN benchmark. The archive remains a public GitHub Raw dependency. The Flask service and production domain remain unchanged.
