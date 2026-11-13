@@ -83,3 +83,52 @@ jobs:
           NODE
       - name: Measure first and repeat AETHER latency and payloads (read-only)
         run: python3 tests/measure_public_latency.py
+
+  static-site-smoke:
+    # Read-only external verification of the separately deployed staging site.
+    # This does not validate or replace the existing Flask production service.
+    needs: preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify the isolated Render Static Site over public HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://aether-cdn-preview.onrender.com"
+          code=""
+          for attempt in $(seq 1 12); do
+            if metrics=$(curl -sS -L --connect-timeout 5 --max-time 8 \
+              -D "$RUNNER_TEMP/cdn-preview.headers" \
+              -o "$RUNNER_TEMP/cdn-preview.html" \
+              -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/"); then
+              read -r code ttfb total bytes <<< "$metrics"
+              echo "static_home attempt=$attempt HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+              if [ "$code" = "200" ]; then break; fi
+            fi
+            sleep 5
+          done
+          test "$code" = "200"
+          grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview.html"
+          grep -q 'script src="./app.js"' "$RUNNER_TEMP/cdn-preview.html"
+          grep -Ei '^content-type:|^cache-control:' "$RUNNER_TEMP/cdn-preview.headers" || true
+
+          metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+            -o "$RUNNER_TEMP/cdn-preview.js" \
+            -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/app.js")
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "static_js HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = "200"
+          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
+          if grep -Eq '/api/run|/api/results|/health' "$RUNNER_TEMP/cdn-preview.js"; then
+            echo "::error::Static preview unexpectedly references Flask API routes."
+            exit 1
+          fi
+
+          metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+            -o "$RUNNER_TEMP/cdn-preview-repeat.html" \
+            -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/")
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "static_home_repeat HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = "200"
+          grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview-repeat.html"
