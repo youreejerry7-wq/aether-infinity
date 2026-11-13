@@ -170,7 +170,12 @@ class SpeedLabTests(unittest.TestCase):
         self.assertEqual(data["trial_execution_order"], repeated["trial_execution_order"])
         self.assertIn("shuffled", data["methodology"])
         self.assertIn("not identical elapsed time", data["methodology"])
-        self.assertGreater(data["calibration_seconds_total"], 0)
+        self.assertGreater(data["calibration_wall_seconds"], 0)
+        self.assertGreater(data["calibration_estimator_seconds"], 0)
+        self.assertGreaterEqual(
+            data["calibration_wall_seconds"],
+            data["calibration_estimator_seconds"],
+        )
         self.assertEqual(set(data["results"]), set(METHODS))
         total_units = 0
         for name, metrics in data["results"].items():
@@ -377,8 +382,8 @@ class SpeedLabTests(unittest.TestCase):
         self.assertEqual(before.exists(), was_present)
 
 
-    def test_matched_time_calibration_excludes_rng_setup(self):
-        """Calibration and measured trials time the estimator, not RNG setup."""
+    def test_calibration_wall_time_includes_rng_setup_and_loop_overhead(self):
+        """Report full calibration wall time and estimator-only time separately."""
         from unittest.mock import patch
         import speed_lab
 
@@ -394,8 +399,7 @@ class SpeedLabTests(unittest.TestCase):
                 events.append("rng")
 
             def shuffle(self, values):
-                # The benchmark also uses seeded RNGs for its deterministic
-                # interleaving schedule; keep this test focused on timer order.
+                # Keep this test focused on the order and timing boundaries.
                 values.reverse()
 
         def stub_method(samples, rng):
@@ -410,15 +414,17 @@ class SpeedLabTests(unittest.TestCase):
         with patch.object(speed_lab, "METHODS", methods), \
              patch.object(speed_lab.time, "perf_counter", side_effect=fake_clock), \
              patch.object(speed_lab.random, "Random", TrackingRandom):
-            speed_lab.benchmark_matched_time(
+            report = speed_lab.benchmark_matched_time(
                 budget_seconds=0.005, replicates=2, seed=1
             )
 
-        # The two leading clock events measure shared quadrature setup.
-        self.assertEqual(events[:2], ["clock", "clock"])
-        # The next event creates the deterministic calibration-order RNG.
-        # Each method RNG is created before its estimator timer starts.
-        self.assertEqual(events[3:15], ["rng", "clock", "method", "clock"] * 3)
+        # First two clock events measure shared quadrature setup. The third
+        # begins the full calibration window before RNG construction.
+        self.assertEqual(events[:3], ["clock", "clock", "clock"])
+        # Each calibration estimator timer still excludes its RNG construction.
+        self.assertEqual(events[4:16], ["rng", "clock", "method", "clock"] * 3)
+        self.assertGreater(report["calibration_wall_seconds"],
+                           report["calibration_estimator_seconds"])
 
 
     def test_antithetic_variance_quadrature_runs_once_per_report(self):
