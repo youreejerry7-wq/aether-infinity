@@ -1,0 +1,34 @@
+name: AETHER speed lab tests
+
+on:
+  pull_request:
+    paths:
+      - 'speed_lab.py'
+      - 'tests/test_speed_lab*.py'
+      - '.github/workflows/speed-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Test variance reduction methods and independent references
+        run: python -m unittest discover -s tests -p 'test_speed_lab*.py' -v
+      - name: Show reproducible benchmark
+        run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
+
+      # Fifteen short trials; calibrated counts are proportionally scaled
+      # only when their aggregate would exceed the shared two-million-unit cap.
+      # Actual durations, requested counts, and allocated counts remain visible.
+      - name: Show measured matched-time trials (seed 2026)
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2026
+      - name: Repeat matched-time trials with an independent seed
+        run: python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2027
