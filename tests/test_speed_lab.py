@@ -474,19 +474,20 @@ class SpeedLabTests(unittest.TestCase):
             self.assertFalse(setup["included_in_per_method_trial_times"])
 
 
-def test_matched_time_reports_shared_setup_and_end_to_end_wall_time():
-    report = benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=19)
+    def test_matched_time_reports_shared_setup_and_end_to_end_wall_time(self):
+        report = benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=19)
 
-    shared_setup = (
-        report["variance_reference_setup"]["elapsed_seconds"]
-        + report["calibration_wall_seconds"]
-    )
-    assert report["end_to_end_wall_seconds"] > 0
-    assert report["measured_trials_wall_seconds"] > 0
-    assert report["shared_setup_wall_seconds"] == shared_setup
-    assert report["end_to_end_wall_seconds"] >= (
-        report["shared_setup_wall_seconds"] + report["measured_trials_wall_seconds"]
-    )
+        shared_setup = (
+            report["variance_reference_setup"]["elapsed_seconds"]
+            + report["calibration_wall_seconds"]
+        )
+        self.assertGreater(report["end_to_end_wall_seconds"], 0)
+        self.assertGreater(report["measured_trials_wall_seconds"], 0)
+        self.assertEqual(report["shared_setup_wall_seconds"], shared_setup)
+        self.assertGreaterEqual(
+            report["end_to_end_wall_seconds"],
+            report["shared_setup_wall_seconds"] + report["measured_trials_wall_seconds"],
+        )
 
 
 if __name__ == "__main__":
