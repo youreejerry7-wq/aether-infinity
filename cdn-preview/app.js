@@ -2,6 +2,8 @@
 (function (root) {
   "use strict";
 
+  const LATEST_URL =
+    "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json";
   const ARCHIVE_URL =
     "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json";
   const REFRESH_MS = 5 * 60 * 1000;
@@ -9,7 +11,7 @@
   const MANUAL_REFRESH_COOLDOWN_MS = 30 * 1000;
   const REQUEST_TIMEOUT_MS = 10 * 1000;
   const MAX_EXPERIMENTS = 50;
-  const STORAGE_KEY = "aether.archive.preview.v1";
+  const STORAGE_KEY = "aether.archive.preview.v2";
 
   function isUsableArchive(data) {
     const latest = Array.isArray(data) ? data[0] : null;
@@ -57,8 +59,9 @@
       const body = doc.getElementById("experiments");
       const note = doc.getElementById("note");
 
-      summary.textContent =
-        data.length + " archived cycles · latest: " + timestamp;
+      summary.textContent = data.length > 1
+        ? data.length + " archived cycles · latest: " + timestamp
+        : "Latest archived cycle: " + timestamp;
       setStatus(statusMessage || "Latest archive record loaded");
       body.replaceChildren();
 
@@ -131,6 +134,25 @@
       }
     }
 
+    async function fetchArchive(cache, signal) {
+      const options = { cache, signal };
+      const latestResponse = await fetchImpl(LATEST_URL, options);
+      if (latestResponse && latestResponse.ok) {
+        return latestResponse.json();
+      }
+      if (!latestResponse || latestResponse.status !== 404) {
+        throw new Error("archive_unavailable");
+      }
+
+      // Keep the preview usable until the research workflow publishes the
+      // compact one-record snapshot on main.
+      const archiveResponse = await fetchImpl(ARCHIVE_URL, options);
+      if (!archiveResponse || !archiveResponse.ok) {
+        throw new Error("archive_unavailable");
+      }
+      return archiveResponse.json();
+    }
+
     async function refresh(force) {
       if (doc.hidden || inFlight) return false;
       if (force && now() - lastManualAt < MANUAL_REFRESH_COOLDOWN_MS) {
@@ -153,12 +175,10 @@
       );
 
       try {
-        const response = await fetchImpl(ARCHIVE_URL, {
-          cache: force ? "reload" : "default",
-          signal: controller.signal
-        });
-        if (!response || !response.ok) throw new Error("archive_unavailable");
-        const data = await response.json();
+        const data = await fetchArchive(
+          force ? "reload" : "default",
+          controller.signal
+        );
         if (!isUsableArchive(data)) throw new Error("archive_invalid");
 
         render(data);
@@ -206,6 +226,7 @@
   }
 
   const api = {
+    LATEST_URL,
     ARCHIVE_URL,
     REFRESH_MS,
     RETRY_MS,

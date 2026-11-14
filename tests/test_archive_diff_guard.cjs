@@ -21,10 +21,12 @@ function commit(repo, message) {
   return git(repo, "rev-parse", "HEAD");
 }
 
+const ARCHIVE_PATHS = ["data/research.json", "data/research-latest.json"];
+
 function archiveDiffExitCode(repo, baseSha, headSha) {
   const result = spawnSync(
     "git",
-    ["diff", "--quiet", `${baseSha}...${headSha}`, "--", "data/research.json"],
+    ["diff", "--quiet", `${baseSha}...${headSha}`, "--", ...ARCHIVE_PATHS],
     { cwd: repo }
   );
   if (result.error) throw result.error;
@@ -39,6 +41,7 @@ test("base-branch archive advances do not look like PR archive edits", () => {
     git(repo, "config", "user.name", "AETHER test");
     git(repo, "config", "user.email", "aether-test@example.invalid");
     write(repo, "data/research.json", "base archive\\n");
+    write(repo, "data/research-latest.json", "base latest snapshot\\n");
     const baseSha = commit(repo, "base archive");
 
     git(repo, "switch", "-c", "review/pr");
@@ -47,6 +50,7 @@ test("base-branch archive advances do not look like PR archive edits", () => {
 
     git(repo, "switch", "main");
     write(repo, "data/research.json", "new scheduled cycle\\n");
+    write(repo, "data/research-latest.json", "new scheduled snapshot\\n");
     const currentBase = commit(repo, "scheduled archive update");
 
     // Mirror a review-branch sync: the PR head contains the current base
@@ -64,22 +68,25 @@ test("base-branch archive advances do not look like PR archive edits", () => {
   }
 });
 
-test("a PR that edits the archive is still rejected", () => {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "aether-archive-guard-"));
-  try {
-    git(repo, "init", "-q");
-    git(repo, "branch", "-M", "main");
-    git(repo, "config", "user.name", "AETHER test");
-    git(repo, "config", "user.email", "aether-test@example.invalid");
-    write(repo, "data/research.json", "base archive\\n");
-    const baseSha = commit(repo, "base archive");
+test("a PR that edits either generated research file is still rejected", () => {
+  for (const editedPath of ARCHIVE_PATHS) {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "aether-archive-guard-"));
+    try {
+      git(repo, "init", "-q");
+      git(repo, "branch", "-M", "main");
+      git(repo, "config", "user.name", "AETHER test");
+      git(repo, "config", "user.email", "aether-test@example.invalid");
+      write(repo, "data/research.json", "base archive\\n");
+      write(repo, "data/research-latest.json", "base latest snapshot\\n");
+      const baseSha = commit(repo, "base archive and snapshot");
 
-    git(repo, "switch", "-c", "review/pr");
-    write(repo, "data/research.json", "PR edited archive\\n");
-    const prHead = commit(repo, "unauthorized archive edit");
+      git(repo, "switch", "-c", "review/pr");
+      write(repo, editedPath, "PR edited generated data\\n");
+      const prHead = commit(repo, "unauthorized generated-data edit");
 
-    assert.equal(archiveDiffExitCode(repo, baseSha, prHead), 1);
-  } finally {
-    fs.rmSync(repo, { recursive: true, force: true });
+      assert.equal(archiveDiffExitCode(repo, baseSha, prHead), 1, editedPath);
+    } finally {
+      fs.rmSync(repo, { recursive: true, force: true });
+    }
   }
 });

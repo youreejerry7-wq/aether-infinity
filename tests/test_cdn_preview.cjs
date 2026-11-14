@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const {
+  LATEST_URL,
   ARCHIVE_URL,
   MAX_EXPERIMENTS,
   REQUEST_TIMEOUT_MS,
@@ -114,15 +115,15 @@ test("archive validation rejects empty, malformed, and undated data", () => {
   assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", interpretation: "Missing experiments" }]), false);
 });
 
-test("preview uses one stable cached archive URL and renders untrusted text inertly", async () => {
-  const payload = archive("<img src=x onerror=alert(1)>");
-  const h = makeHarness(async () => ({ ok: true, json: async () => payload }));
+test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {
+  const payload = archive("<img src=x onerror=alert(1)>").slice(0, 1);
+  const h = makeHarness(async () => ({ ok: true, status: 200, json: async () => payload }));
   assert.equal(await h.controller.refresh(false), true);
 
   assert.equal(h.calls.length, 1);
-  assert.equal(h.calls[0].url, ARCHIVE_URL);
+  assert.equal(h.calls[0].url, LATEST_URL);
   assert.equal(h.calls[0].options.cache, "default");
-  assert.equal(h.document.nodes.summary.textContent.includes("2 archived cycles"), true);
+  assert.match(h.document.nodes.summary.textContent, /^Latest archived cycle:/);
   assert.equal(h.document.nodes.status.textContent, "Latest archive record loaded");
   assert.equal(h.document.nodes.experiments.children.length, 1);
   assert.equal(
@@ -136,6 +137,19 @@ test("preview uses one stable cached archive URL and renders untrusted text iner
   assert.doesNotMatch(source, /\binnerHTML\b/);
   assert.doesNotMatch(source, /cache\s*:\s*["']no-store|\?t=/i);
   assert.doesNotMatch(source, /\/api\//);
+});
+
+test("a missing compact snapshot falls back to the full archive", async () => {
+  const payload = archive("fallback archive");
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) return { ok: false, status: 404 };
+    return { ok: true, status: 200, json: async () => payload };
+  });
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
+  assert.match(h.document.nodes.summary.textContent, /2 archived cycles/);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "fallback archive");
 });
 
 test("successful refreshes are throttled for five minutes unless manually forced", async () => {
@@ -399,12 +413,13 @@ test("static preview transfer budget and external data dependency stay bounded",
   const totalBytes = htmlBytes + scriptBytes;
 
   // Raw source bytes are a reproducible upper bound before HTTP compression.
-  assert.ok(scriptBytes <= 8 * 1024, `app.js is ${scriptBytes} bytes; budget is 8192`);
-  assert.ok(totalBytes <= 12 * 1024, `HTML + JS are ${totalBytes} bytes; budget is 12288`);
+  assert.ok(scriptBytes <= 9 * 1024, `app.js is ${scriptBytes} bytes; budget is 9216`);
+  assert.ok(totalBytes <= 13 * 1024, `HTML + JS are ${totalBytes} bytes; budget is 13312`);
 
   const source = script.toString("utf8");
   const absoluteUrls = [...source.matchAll(/https?:\/\/[^"'\s]+/g)].map((match) => match[0]);
-  assert.deepEqual(absoluteUrls, [ARCHIVE_URL], "the archive must remain the only external data URL");
+  assert.deepEqual(absoluteUrls, [LATEST_URL, ARCHIVE_URL], "only the compact snapshot and its fallback may be external");
+  assert.equal(source.split("fetchImpl(LATEST_URL").length - 1, 1);
   assert.equal(source.split("fetchImpl(ARCHIVE_URL").length - 1, 1);
 });
 

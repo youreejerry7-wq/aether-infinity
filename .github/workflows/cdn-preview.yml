@@ -8,6 +8,7 @@ on:
       - 'tests/measure_public_latency.py'
       - 'tests/test_measure_public_latency.py'
       - 'data/research.json'
+      - 'data/research-latest.json'
       - '.github/workflows/cdn-preview.yml'
   workflow_dispatch:
 permissions:
@@ -37,10 +38,10 @@ jobs:
           # Compare against the current base branch so a review-branch sync does
           # not look like an unauthorized archive edit.
           git fetch --no-tags origin "+refs/heads/${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
-          if git diff --quiet "origin/${PR_BASE_REF}...${PR_HEAD_SHA}" -- data/research.json; then
-            echo "PASS: PR does not modify the scheduled research archive."
+          if git diff --quiet "origin/${PR_BASE_REF}...${PR_HEAD_SHA}" -- data/research.json data/research-latest.json; then
+            echo "PASS: PR does not modify the scheduled archive or compact snapshot."
           else
-            echo "::error::This PR modifies data/research.json; archive data is maintained only by the scheduled research workflow."
+            echo "::error::This PR modifies generated research data; both files are maintained only by the scheduled research workflow."
             exit 1
           fi
       - name: Test cache, throttling, visibility, bounds, and safe rendering
@@ -81,6 +82,39 @@ jobs:
           }
           console.log(`CDN preview accepts live archive schema (${archive.length} cycles)`);
           NODE
+      - name: Verify the optional compact latest-cycle snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json"
+          latest_code=$(curl -sS -L --connect-timeout 5 --max-time 15 \
+            --dump-header "$RUNNER_TEMP/latest.headers" \
+            --output "$RUNNER_TEMP/research-latest.json" \
+            --write-out '%{http_code}' "$latest_url" || true)
+          echo "latest_snapshot HTTP=${latest_code:-000}"
+          if [ "$latest_code" = "200" ]; then
+            grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/latest.headers"
+            python - "$RUNNER_TEMP/research.json" "$RUNNER_TEMP/research-latest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          archive_path, latest_path = map(Path, sys.argv[1:])
+          archive = json.loads(archive_path.read_text(encoding="utf-8"))
+          latest = json.loads(latest_path.read_text(encoding="utf-8"))
+          assert isinstance(latest, list) and len(latest) == 1
+          assert latest == [archive[0]], "compact snapshot must exactly match the full archive head"
+          archive_bytes = archive_path.stat().st_size
+          latest_bytes = latest_path.stat().st_size
+          reduction = 100 * (1 - latest_bytes / archive_bytes)
+          print(f"Compact snapshot: {latest_bytes} bytes vs {archive_bytes} full-archive bytes ({reduction:.1f}% smaller)")
+          PY
+          elif [ "$latest_code" = "404" ]; then
+            echo "Compact snapshot is not published on main yet; the frontend's full-archive fallback remains active."
+          else
+            echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
+            exit 1
+          fi
+
       - name: Measure first and repeat AETHER latency and payloads (read-only)
         run: python3 tests/measure_public_latency.py
 
@@ -123,12 +157,13 @@ jobs:
               -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/app.js" || true)
             read -r code ttfb total bytes <<< "${metrics:-}"
             echo "static_js attempt=$attempt HTTP=${code:-000} ttfb_seconds=${ttfb:-n/a} total_seconds=${total:-n/a} bytes=${bytes:-0}"
-            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"; then
+            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"; then
               break
             fi
             sleep 5
           done
           test "$code" = "200"
+          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -Eiq '^content-type:.*(javascript|ecmascript)' "$RUNNER_TEMP/cdn-preview-js.headers"
           grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview-js.headers"

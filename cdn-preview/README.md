@@ -4,7 +4,7 @@ This directory is an isolated, static-only frontend experiment intended to measu
 
 ## Safety and scope
 
-- Reads only the public `data/research.json` file from GitHub Raw.
+- Prefers the one-record `data/research-latest.json` snapshot from GitHub Raw and falls back to the full `data/research.json` archive only while the snapshot is unavailable.
 - Does not call `/api/run`, `/api/results`, `/health`, SQLite, Stripe, or any private/customer endpoint.
 - Does not submit experiments, mutate the archive, or access secrets.
 - Uses text-only DOM rendering for archive-supplied strings.
@@ -25,7 +25,7 @@ After this pull request is reviewed, a separate free Render Static Site can be e
 
 Do not create, replace, or redirect the production web service as part of this PR. First deploy a separate preview site, verify its own URL and browser behavior, and compare its first-load and repeat-load latency against the existing Flask homepage. Only consider a production-domain change after explicit owner review.
 
-The static page itself is expected to be served from Render's static-site CDN. Its archive data still comes from GitHub's public raw-content endpoint, so archive freshness and GitHub availability remain external dependencies. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
+The static page itself is served from Render's static-site CDN. Its compact snapshot and fallback archive come from GitHub's public raw-content endpoint, so freshness and GitHub availability remain external dependencies. The scheduled workflow keeps the compact snapshot equal to the newest full-archive record; until that file is published on main, the frontend falls back to the full archive. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
 
 ## Local checks
 
