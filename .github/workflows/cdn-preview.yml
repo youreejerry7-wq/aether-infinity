@@ -125,6 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v7
       - name: Verify the isolated Render Static Site over public HTTP
         shell: bash
         run: |
@@ -145,6 +146,8 @@ jobs:
           test "$code" = "200"
           grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview.html"
           grep -q 'script src="./app.js"' "$RUNNER_TEMP/cdn-preview.html"
+          cmp --silent "$RUNNER_TEMP/cdn-preview.html" cdn-preview/index.html
+          echo "static_home matches checked-out PR asset sha256=$(sha256sum cdn-preview/index.html | cut -d' ' -f1)"
           grep -Ei '^content-type:|^cache-control:' "$RUNNER_TEMP/cdn-preview.headers" || true
           grep -Eiq '^content-type:[[:space:]]*text/html' "$RUNNER_TEMP/cdn-preview.headers"
           grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview.headers"
@@ -163,6 +166,8 @@ jobs:
             sleep 5
           done
           test "$code" = "200"
+          cmp --silent "$RUNNER_TEMP/cdn-preview.js" cdn-preview/app.js
+          echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'aether.archive.preview.snapshot-missing-until.v1' "$RUNNER_TEMP/cdn-preview.js"
