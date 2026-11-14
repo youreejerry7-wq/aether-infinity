@@ -166,7 +166,7 @@ jobs:
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'aether.archive.preview.snapshot-missing-until.v1' "$RUNNER_TEMP/cdn-preview.js"
-          grep -q '15 \\* 60 \\* 1000' "$RUNNER_TEMP/cdn-preview.js"
+          grep -Fq '15 * 60 * 1000' "$RUNNER_TEMP/cdn-preview.js"
           test "$(wc -c < "$RUNNER_TEMP/cdn-preview.js")" -le 10240
           grep -Eiq '^content-type:.*(javascript|ecmascript)' "$RUNNER_TEMP/cdn-preview-js.headers"
           grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview-js.headers"
