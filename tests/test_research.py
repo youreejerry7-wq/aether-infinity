@@ -72,10 +72,14 @@ def test_run_research_cycle_file_persistence(tmp_path):
     assert data[0]["time"] == res["time"]
     assert len(data[0]["experiments"]) == 4
 
-    # Run a second cycle and verify prepending and cap
+    latest_file = tmp_path / "research-latest.json"
+    assert json.loads(latest_file.read_text()) == [res]
+
+    # Run a second cycle and verify both the full history and compact snapshot.
     run_research_cycle(seed=1000, out_path=out_file)
     data_updated = json.loads(out_file.read_text())
     assert len(data_updated) == 2
+    assert json.loads(latest_file.read_text()) == [data_updated[0]]
 
 
 @pytest.mark.parametrize("existing", ["{not json", "{}", ""])
@@ -105,7 +109,9 @@ def test_failed_atomic_replace_preserves_archive(tmp_path, monkeypatch):
         run_research_cycle(seed=123, out_path=archive)
 
     assert archive.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "research-latest.json").exists()
     assert not list(tmp_path.glob(".research-*.tmp"))
+    assert not list(tmp_path.glob(".research-latest-*.tmp"))
 
 
 def test_synthetic_archive_commits_do_not_trigger_render_deploys():
@@ -113,5 +119,5 @@ def test_synthetic_archive_commits_do_not_trigger_render_deploys():
     from pathlib import Path
 
     workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/research.yml").read_text()
-    assert "git add data/research.json" in workflow
+    assert "git add data/research.json data/research-latest.json" in workflow
     assert 'git commit -m "Record scheduled research cycle [skip render]"' in workflow
