@@ -164,9 +164,6 @@
 
     async function fetchArchive(cache, signal) {
       const options = { cache, signal };
-      // A 404 is definitive for this optional file. Remember it briefly so
-      // each five-minute refresh does not repeat a known-missing request.
-      // Manual refresh bypasses the negative cache to check for publication.
       if (cache === "reload" || now() >= snapshotMissingUntil) {
         const latestResponse = await fetchImpl(LATEST_URL, options);
         if (latestResponse && latestResponse.ok) {
@@ -179,8 +176,6 @@
         rememberMissingSnapshot();
       }
 
-      // Keep the preview usable until the research workflow publishes the
-      // compact one-record snapshot on main.
       const archiveResponse = await fetchImpl(ARCHIVE_URL, options);
       if (!archiveResponse || !archiveResponse.ok) {
         throw new Error("archive_unavailable");
