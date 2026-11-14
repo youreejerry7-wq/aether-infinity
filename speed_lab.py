@@ -336,6 +336,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     # Interleave measured trials with a deterministic shuffled schedule.
     # Each method retains its own deterministic RNG seed for each replicate.
     trial_data = {name: {"errors": [], "durations": []} for name in method_names}
+    measured_trials_wall_start = time.perf_counter()
     trial_order = [
         (name, trial)
         for name in method_names
@@ -352,6 +353,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         elapsed = time.perf_counter() - start
         trial_data[name]["durations"].append(elapsed)
         trial_data[name]["errors"].append(estimate - math.pi)
+    measured_trials_wall_seconds = time.perf_counter() - measured_trials_wall_start
 
     for name in method_names:
         samples = samples_by_method[name]
@@ -417,6 +419,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             if metrics["theoretical_standard_error_squared_seconds"] > 0 else None
         )
 
+    end_to_end_wall_seconds = time.perf_counter() - variance_setup_start
     return {
         "environment": benchmark_environment(),
         "variance_reference_setup": {
@@ -426,10 +429,19 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "included_in_per_method_trial_times": False,
         },
         "reference": "pi",
+        "end_to_end_wall_seconds": end_to_end_wall_seconds,
+        "shared_setup_wall_seconds": (
+            variance_reference_setup_seconds + calibration_wall_seconds
+        ),
+        "measured_trials_wall_seconds": measured_trials_wall_seconds,
         "methodology": (
             "Measured trials with separately calibrated sampling-unit counts near "
-            "a common wall-time target, not identical elapsed time. Full calibration "
-            "wall time (including order generation, RNG setup, and estimator calls) "
+            "a common wall-time target, not identical elapsed time. Full end-to-end "
+            "wall time includes reference quadrature, calibration, measured trials, "
+            "and report assembly. Shared setup is reported separately and is not "
+            "allocated to individual methods; per-method error-time ratios exclude "
+            "that shared setup and must be interpreted alongside end-to-end time. "
+            "Full calibration wall time (including order generation, RNG setup, and estimator calls) "
             "is reported separately from estimator-only calibration time and trial durations. "
             "Calibrated per-method counts are proportionally scaled only if their aggregate exceeds the shared budget; requested and allocated counts are reported. "
             "Method-specific random draws and integrand evaluations per unit are reported; "
