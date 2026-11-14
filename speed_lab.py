@@ -419,8 +419,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             if metrics["theoretical_standard_error_squared_seconds"] > 0 else None
         )
 
-    end_to_end_wall_seconds = time.perf_counter() - variance_setup_start
-    return {
+    report = {
         "environment": benchmark_environment(),
         "variance_reference_setup": {
             "method": "deterministic_midpoint_quadrature",
@@ -429,7 +428,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "included_in_per_method_trial_times": False,
         },
         "reference": "pi",
-        "end_to_end_wall_seconds": end_to_end_wall_seconds,
+        "end_to_end_wall_seconds": None,
         "shared_setup_wall_seconds": (
             variance_reference_setup_seconds + calibration_wall_seconds
         ),
@@ -477,6 +476,9 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         "sampling_unit_budget": MAX_TOTAL_SAMPLES,
         "results": results,
     }
+    report["end_to_end_wall_seconds"] = time.perf_counter() - variance_setup_start
+    return report
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
