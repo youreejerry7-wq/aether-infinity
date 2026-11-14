@@ -12,6 +12,8 @@
   const REQUEST_TIMEOUT_MS = 10 * 1000;
   const MAX_EXPERIMENTS = 50;
   const STORAGE_KEY = "aether.archive.preview.v2";
+  const SNAPSHOT_MISSING_KEY = "aether.archive.preview.snapshot-missing-until.v1";
+  const SNAPSHOT_MISSING_RECHECK_MS = 15 * 60 * 1000;
 
   function isUsableArchive(data) {
     const latest = Array.isArray(data) ? data[0] : null;
@@ -39,6 +41,11 @@
     let lastManualAt = -Infinity;
     let nextAllowedAt = -Infinity;
     let timer = null;
+    let snapshotMissingUntil = 0;
+    try {
+      snapshotMissingUntil = Number(storage && storage.getItem(SNAPSHOT_MISSING_KEY)) || 0;
+    } catch (_) {}
+    if (snapshotMissingUntil <= now()) snapshotMissingUntil = 0;
 
     function setStatus(message) {
       doc.getElementById("status").textContent = message;
@@ -134,14 +141,42 @@
       }
     }
 
+    function rememberMissingSnapshot() {
+      snapshotMissingUntil = now() + SNAPSHOT_MISSING_RECHECK_MS;
+      try {
+        if (storage && typeof storage.setItem === "function") {
+          storage.setItem(SNAPSHOT_MISSING_KEY, String(snapshotMissingUntil));
+        }
+      } catch (_) {}
+    }
+
+    function clearMissingSnapshot() {
+      if (!snapshotMissingUntil) return;
+      snapshotMissingUntil = 0;
+      try {
+        if (storage && typeof storage.removeItem === "function") {
+          storage.removeItem(SNAPSHOT_MISSING_KEY);
+        } else if (storage && typeof storage.setItem === "function") {
+          storage.setItem(SNAPSHOT_MISSING_KEY, "0");
+        }
+      } catch (_) {}
+    }
+
     async function fetchArchive(cache, signal) {
       const options = { cache, signal };
-      const latestResponse = await fetchImpl(LATEST_URL, options);
-      if (latestResponse && latestResponse.ok) {
-        return latestResponse.json();
-      }
-      if (!latestResponse || latestResponse.status !== 404) {
-        throw new Error("archive_unavailable");
+      // A 404 is definitive for this optional file. Remember it briefly so
+      // each five-minute refresh does not repeat a known-missing request.
+      // Manual refresh bypasses the negative cache to check for publication.
+      if (cache === "reload" || now() >= snapshotMissingUntil) {
+        const latestResponse = await fetchImpl(LATEST_URL, options);
+        if (latestResponse && latestResponse.ok) {
+          clearMissingSnapshot();
+          return latestResponse.json();
+        }
+        if (!latestResponse || latestResponse.status !== 404) {
+          throw new Error("archive_unavailable");
+        }
+        rememberMissingSnapshot();
       }
 
       // Keep the preview usable until the research workflow publishes the
@@ -233,6 +268,8 @@
     REQUEST_TIMEOUT_MS,
     MAX_EXPERIMENTS,
     STORAGE_KEY,
+    SNAPSHOT_MISSING_KEY,
+    SNAPSHOT_MISSING_RECHECK_MS,
     isUsableArchive,
     createController
   };
