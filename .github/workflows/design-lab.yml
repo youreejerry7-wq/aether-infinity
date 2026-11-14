@@ -1,0 +1,68 @@
+name: AETHER bounded design sandbox
+on:
+  pull_request:
+    paths:
+      - 'design_lab.py'
+      - 'tests/test_design_lab.py'
+      - '.github/workflows/design-lab.yml'
+      - 'data/research.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  geometry-holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject changes to the scheduled research archive
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Compare the current base and checked-out PR merge trees directly;
+          # this also works with checkout's default shallow fetch.
+          git fetch --no-tags origin "+refs/heads/${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
+          if git diff --quiet "origin/${PR_BASE_REF}" HEAD -- data/research.json; then
+            echo "PASS: PR does not modify the scheduled research archive."
+          else
+            echo "::error::This PR modifies data/research.json; only the scheduled research workflow may update it."
+            exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify seeded search and independent holdout controls
+        run: python -m unittest discover -s tests -p 'test_design_lab.py' -v
+      - name: Produce deterministic simulation-only report
+        run: python design_lab.py
+  smoke-existing-production:
+    # Read-only GETs; measures currently deployed code, not this review branch.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check both separate public services from external runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Checked at UTC $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          for service in aether vaultcore; do
+            case "$service" in
+              aether) url='https://aether-infinity.onrender.com/health' ;;
+              vaultcore) url='https://vaultcore-app.onrender.com/' ;;
+            esac
+            output="/tmp/public-smoke-$service"
+            metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o "$output" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r status ttfb total bytes <<< "$metrics"
+            echo "$service GET: HTTP=$status ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+            test "$status" = 200
+            if [ "$service" = aether ]; then
+              python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$output"
+            else
+              grep -qi 'VaultCore' "$output"
+            fi
+          done
