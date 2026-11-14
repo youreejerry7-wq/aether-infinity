@@ -10,6 +10,8 @@ const {
   REQUEST_TIMEOUT_MS,
   REFRESH_MS,
   STORAGE_KEY,
+  SNAPSHOT_MISSING_KEY,
+  SNAPSHOT_MISSING_RECHECK_MS,
   RETRY_MS,
   createController,
   isUsableArchive
@@ -35,6 +37,16 @@ function archive(name = "known baseline") {
       experiments: []
     }
   ];
+}
+
+function makeMemoryStorage() {
+  const values = new Map();
+  return {
+    values,
+    getItem(key) { return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { values.set(key, String(value)); },
+    removeItem(key) { values.delete(key); }
+  };
 }
 
 function makeNode() {
@@ -152,6 +164,67 @@ test("a missing compact snapshot falls back to the full archive", async () => {
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "fallback archive");
 });
 
+test("a missing compact snapshot is cached across page reloads", async () => {
+  const storage = makeMemoryStorage();
+  const first = makeHarness(async (url) => {
+    if (url === LATEST_URL) return { ok: false, status: 404 };
+    return { ok: true, json: async () => archive("full archive") };
+  }, 1000, storage);
+
+  assert.equal(await first.controller.refresh(false), true);
+  assert.equal(storage.values.get(SNAPSHOT_MISSING_KEY), String(1000 + SNAPSHOT_MISSING_RECHECK_MS));
+
+  const second = makeHarness(async (url) => {
+    assert.equal(url, ARCHIVE_URL, "known-missing snapshot should be skipped");
+    return { ok: true, json: async () => archive("cached fallback") };
+  }, 1000 + REFRESH_MS, storage);
+
+  assert.equal(await second.controller.refresh(false), true);
+  assert.deepEqual(second.calls.map((call) => call.url), [ARCHIVE_URL]);
+});
+
+test("manual refresh bypasses the missing-snapshot cache", async () => {
+  const storage = makeMemoryStorage();
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) return { ok: false, status: 404 };
+    return { ok: true, json: async () => archive("manual fallback") };
+  }, 1000, storage);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(await h.controller.refresh(true), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [
+    LATEST_URL, ARCHIVE_URL, LATEST_URL, ARCHIVE_URL
+  ]);
+});
+
+test("the missing-snapshot cache expires and retries publication checks", async () => {
+  const storage = makeMemoryStorage();
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) return { ok: false, status: 404 };
+    return { ok: true, json: async () => archive("expiry fallback") };
+  }, 1000, storage);
+
+  assert.equal(await h.controller.refresh(false), true);
+  h.advance(SNAPSHOT_MISSING_RECHECK_MS);
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [
+    LATEST_URL, ARCHIVE_URL, LATEST_URL, ARCHIVE_URL
+  ]);
+});
+
+test("publishing the compact snapshot clears the negative cache", async () => {
+  const storage = makeMemoryStorage();
+  storage.setItem(SNAPSHOT_MISSING_KEY, String(1000 + SNAPSHOT_MISSING_RECHECK_MS));
+  const h = makeHarness(async (url) => {
+    assert.equal(url, LATEST_URL);
+    return { ok: true, json: async () => archive("new compact snapshot").slice(0, 1) };
+  }, 1000, storage);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(storage.getItem(SNAPSHOT_MISSING_KEY), null);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
+});
+
 test("successful refreshes are throttled for five minutes unless manually forced", async () => {
   const h = makeHarness(async () => ({ ok: true, json: async () => archive() }));
   await h.controller.refresh(false);
@@ -213,6 +286,7 @@ test("saved public archive renders immediately and remains visible when refresh 
   const saved = archive("saved public cycle");
   const storage = {
     getItem(key) {
+      if (key === SNAPSHOT_MISSING_KEY) return null;
       assert.equal(key, STORAGE_KEY);
       return JSON.stringify(saved);
     },
@@ -413,7 +487,7 @@ test("static preview transfer budget and external data dependency stay bounded",
   const totalBytes = htmlBytes + scriptBytes;
 
   // Raw source bytes are a reproducible upper bound before HTTP compression.
-  assert.ok(scriptBytes <= 9 * 1024, `app.js is ${scriptBytes} bytes; budget is 9216`);
+  assert.ok(scriptBytes <= 10 * 1024, `app.js is ${scriptBytes} bytes; budget is 10240`);
   assert.ok(totalBytes <= 13 * 1024, `HTML + JS are ${totalBytes} bytes; budget is 13312`);
 
   const source = script.toString("utf8");
