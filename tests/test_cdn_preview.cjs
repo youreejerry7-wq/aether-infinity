@@ -164,6 +164,50 @@ test("a missing compact snapshot falls back to the full archive", async () => {
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "fallback archive");
 });
 
+test("a malformed compact snapshot falls back to the canonical archive", async () => {
+  const storage = makeMemoryStorage();
+  const payload = archive("valid full archive");
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) {
+      return { ok: true, status: 200, json: async () => { throw new SyntaxError("invalid JSON"); } };
+    }
+    return { ok: true, status: 200, json: async () => payload };
+  }, 1000, storage);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
+  assert.equal(storage.values.get(SNAPSHOT_MISSING_KEY), String(1000 + SNAPSHOT_MISSING_RECHECK_MS));
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "valid full archive");
+});
+
+test("a schema-invalid compact snapshot falls back to the canonical archive", async () => {
+  const payload = archive("schema fallback");
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => [{ time: "2026-11-07T04:00:00Z", experiments: "not-an-array" }]
+      };
+    }
+    return { ok: true, status: 200, json: async () => payload };
+  });
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "schema fallback");
+});
+
+test("a transient compact-snapshot server error does not mask or bypass the error", async () => {
+  const storage = makeMemoryStorage();
+  const h = makeHarness(async () => ({ ok: false, status: 503 }), 1000, storage);
+
+  assert.equal(await h.controller.refresh(false), false);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
+  assert.equal(storage.getItem(SNAPSHOT_MISSING_KEY), null);
+  assert.match(h.document.nodes.status.textContent, /temporarily unavailable/);
+});
+
 test("a missing compact snapshot is cached across page reloads", async () => {
   const storage = makeMemoryStorage();
   const first = makeHarness(async (url) => {
