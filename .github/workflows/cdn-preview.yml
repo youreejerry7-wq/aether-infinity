@@ -166,6 +166,9 @@ jobs:
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'aether.archive.preview.snapshot-missing-until.v1' "$RUNNER_TEMP/cdn-preview.js"
+          # Catch a stale staging deploy that has not picked up the malformed-snapshot fallback.
+          grep -Fq 'const latestData = await latestResponse.json();' "$RUNNER_TEMP/cdn-preview.js"
+          grep -Fq 'if (isUsableArchive(latestData))' "$RUNNER_TEMP/cdn-preview.js"
           grep -Fq '15 * 60 * 1000' "$RUNNER_TEMP/cdn-preview.js"
           test "$(wc -c < "$RUNNER_TEMP/cdn-preview.js")" -le 10240
           grep -Eiq '^content-type:.*(javascript|ecmascript)' "$RUNNER_TEMP/cdn-preview-js.headers"
