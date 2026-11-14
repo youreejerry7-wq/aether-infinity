@@ -11,6 +11,7 @@ import json
 import math
 import random
 import statistics
+import time
 
 SEED = 20261102
 TRAIN_CASES = 8
@@ -122,6 +123,19 @@ def run(seed=SEED):
         "falsification": "Any holdout improvement <= 0 rejects the stated hypothesis",
         "seed": seed,
         "training_case_count": len(sheets),
+        "workload": {
+            "training_grid_evaluations": len(CUT_GRID) * len(sheets),
+            "continuous_reference_evaluations": len(sheets),
+            # Two holdout reports (candidate and negative control), each scoring
+            # both the selected cut and the fixed baseline on every holdout.
+            "holdout_volume_evaluations": 2 * 2 * len(HOLDOUT_SHEETS),
+            "total_box_volume_evaluations": (
+                len(CUT_GRID) * len(sheets)
+                + len(sheets)
+                + 2 * 2 * len(HOLDOUT_SHEETS)
+            ),
+            "hypotheses_evaluated": 1,
+        },
         "training_sheet_cm": list(TRAIN_SHEET),
         "training_jitter_cm": 0.5,
         "grid_cuts_cm": list(CUT_GRID),
@@ -145,5 +159,25 @@ def run(seed=SEED):
     }
 
 
+def run_measured(seed=SEED):
+    """Add local timing to the deterministic report without making run() nondeterministic."""
+    started = time.perf_counter()
+    report = run(seed)
+    elapsed = time.perf_counter() - started
+    evaluations = report["workload"]["total_box_volume_evaluations"]
+    hypotheses = report["workload"]["hypotheses_evaluated"]
+    report["performance"] = {
+        "elapsed_seconds": round(elapsed, 6),
+        "hypotheses_evaluated": hypotheses,
+        "seconds_per_hypothesis": round(elapsed / hypotheses, 6),
+        "box_volume_evaluations_per_second": (
+            round(evaluations / elapsed, 2) if elapsed > 0 else None
+        ),
+        "measurement_scope": "run() only; excludes interpreter startup and JSON serialization",
+        "comparability": "Local diagnostic only; hardware and system load are not normalized.",
+    }
+    return report
+
+
 if __name__ == "__main__":
-    print(json.dumps(run(), indent=2, sort_keys=True))
+    print(json.dumps(run_measured(), indent=2, sort_keys=True))
