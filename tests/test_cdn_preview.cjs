@@ -220,7 +220,7 @@ test("publishing the compact snapshot clears the negative cache", async () => {
     return { ok: true, json: async () => archive("new compact snapshot").slice(0, 1) };
   }, 1000, storage);
 
-  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(await h.controller.refresh(true), true);
   assert.equal(storage.getItem(SNAPSHOT_MISSING_KEY), null);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
 });
