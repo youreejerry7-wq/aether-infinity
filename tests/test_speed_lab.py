@@ -394,11 +394,13 @@ class SpeedLabTests(unittest.TestCase):
                         )
 
     def test_does_not_write_research_archive(self):
-        # The script is an isolated, pure experiment; no output persisted.
+        # Compare bytes, not just existence: the benchmark must never mutate
+        # the scheduled synthetic archive or its historical records.
         before = Path("data/research.json")
-        was_present = before.exists()
+        before_bytes = before.read_bytes() if before.exists() else None
         benchmark(samples=100, replicates=2)
-        self.assertEqual(before.exists(), was_present)
+        after_bytes = before.read_bytes() if before.exists() else None
+        self.assertEqual(after_bytes, before_bytes)
 
 
     def test_calibration_wall_time_includes_rng_setup_and_loop_overhead(self):
