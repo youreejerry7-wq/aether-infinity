@@ -12,6 +12,7 @@ This directory is an isolated, static-only frontend experiment intended to measu
 - Treats local storage as optional: malformed data, disabled storage, and quota errors never block a fresh network response.
 - Limits rendered experiment rows and bounds each fetch with a timeout.
 - Caps manual cache-bypass refreshes to one request every 30 seconds, even when the five-minute automatic refresh window is active.
+- Caches a missing optional compact snapshot for up to 15 minutes to avoid repeated 404 requests; manual refresh checks for publication immediately.
 - The interactive Flask app remains separate and unchanged.
 
 ## Staged static-site settings
