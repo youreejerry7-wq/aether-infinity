@@ -1,4 +1,3 @@
-/* Read-only preview; no Flask calls. */
 (function (root) {
   "use strict";
 
@@ -167,23 +166,17 @@
       if (cache === "reload" || now() >= snapshotMissingUntil) {
         const latestResponse = await fetchImpl(LATEST_URL, options);
         if (latestResponse && latestResponse.ok) {
-          let latestData = null;
           try {
-            latestData = await latestResponse.json();
-          } catch (_) {
-            // A broken optional snapshot must not hide the canonical archive.
-          }
-          if (isUsableArchive(latestData)) {
-            clearMissingSnapshot();
-            return latestData;
-          }
-          // Treat an invalid snapshot like a missing one until the next recheck.
-          rememberMissingSnapshot();
+            const latestData = await latestResponse.json();
+            if (isUsableArchive(latestData)) {
+              clearMissingSnapshot();
+              return latestData;
+            }
+          } catch (_) {}
         } else if (!latestResponse || latestResponse.status !== 404) {
           throw new Error("archive_unavailable");
-        } else {
-          rememberMissingSnapshot();
         }
+        rememberMissingSnapshot();
       }
 
       const archiveResponse = await fetchImpl(ARCHIVE_URL, options);
