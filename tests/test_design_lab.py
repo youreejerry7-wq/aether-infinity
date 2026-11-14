@@ -160,5 +160,30 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(json.loads(json.dumps(a)), a)
 
 
+    def test_workload_counts_are_explicit_and_deterministic(self):
+        report = lab.run()
+        self.assertEqual(report["workload"], {
+            "training_grid_evaluations": 144,
+            "continuous_reference_evaluations": 8,
+            "holdout_volume_evaluations": 12,
+            "total_box_volume_evaluations": 164,
+            "hypotheses_evaluated": 1,
+        })
+        self.assertEqual(report["workload"], lab.run()["workload"])
+
+    def test_measured_run_reports_time_and_throughput_separately(self):
+        from unittest.mock import patch
+        with patch.object(lab.time, "perf_counter", side_effect=(10.0, 10.5)):
+            report = lab.run_measured()
+        metrics = report["performance"]
+        self.assertEqual(metrics["elapsed_seconds"], 0.5)
+        self.assertEqual(metrics["seconds_per_hypothesis"], 0.5)
+        self.assertEqual(metrics["box_volume_evaluations_per_second"], 328.0)
+        self.assertEqual(metrics["hypotheses_evaluated"], 1)
+        self.assertIn("excludes interpreter startup", metrics["measurement_scope"])
+        # The core report remains reproducible; timing is added only by the CLI wrapper.
+        self.assertNotIn("performance", lab.run())
+
+
 if __name__ == "__main__":
     unittest.main()
