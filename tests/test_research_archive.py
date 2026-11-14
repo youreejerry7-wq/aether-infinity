@@ -9,7 +9,9 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-ARCHIVE = Path(__file__).resolve().parents[1] / "data" / "research.json"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+ARCHIVE = DATA_DIR / "research.json"
+LATEST = DATA_DIR / "research-latest.json"
 EXPECTED_NAMES = [
     "Fair coin frequency",
     "Uniform threshold frequency",
@@ -22,6 +24,7 @@ class ResearchArchiveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.records = json.loads(ARCHIVE.read_text(encoding="utf-8"))
+        cls.latest_records = json.loads(LATEST.read_text(encoding="utf-8"))
 
     def test_cycle_structure_and_order(self):
         self.assertIsInstance(self.records, list)
@@ -43,6 +46,10 @@ class ResearchArchiveTests(unittest.TestCase):
                 self.assertIsInstance(cycle["interpretation"], str)
                 self.assertTrue(cycle["interpretation"].strip())
 
+    def test_latest_snapshot_is_exactly_the_archive_head(self):
+        self.assertEqual(self.latest_records, [self.records[0]])
+        self.assertEqual(len(self.latest_records), 1)
+
     def test_experiment_field_types(self):
         for index, cycle in enumerate(self.records):
             for item in cycle["experiments"]:
@@ -63,7 +70,7 @@ class ResearchArchiveTests(unittest.TestCase):
         workflow = (ARCHIVE.parents[1] / ".github" / "workflows" / "research.yml")
         content = workflow.read_text(encoding="utf-8")
         self.assertIn(
-            'git commit -m "Record scheduled research cycle [skip render]"',
+            'git add data/research.json data/research-latest.json',
             content,
         )
 

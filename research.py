@@ -74,6 +74,27 @@ def pi_test(n, rng=None, z_threshold=DEFAULT_Z_THRESHOLD):
     }
 
 
+def _atomic_write_json(path, value):
+    """Atomically write JSON beside its destination to avoid partial snapshots."""
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=path.parent,
+        prefix=f".{path.stem}-", suffix=".tmp", delete=False
+    ) as handle:
+        temp_path = pathlib.Path(handle.name)
+        try:
+            json.dump(value, handle, indent=2)
+            handle.write("\n")
+        except BaseException:
+            temp_path.unlink(missing_ok=True)
+            raise
+    try:
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def run_research_cycle(seed=None, out_path=OUT, z_threshold=DEFAULT_Z_THRESHOLD):
     """
     Executes a complete research cycle and saves the result record.
@@ -126,23 +147,11 @@ def run_research_cycle(seed=None, out_path=OUT, z_threshold=DEFAULT_Z_THRESHOLD)
             raise ValueError("Research archive must be a JSON list")
 
     old_data.insert(0, record)
-    # Atomic replacement prevents interrupted writes from truncating the
-    # previously valid archive. Keep the temporary file on the same filesystem.
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=out_path.parent,
-        prefix=".research-", suffix=".tmp", delete=False
-    ) as handle:
-        temp_path = pathlib.Path(handle.name)
-        try:
-            json.dump(old_data[:100], handle, indent=2)
-            handle.write("\n")
-        except BaseException:
-            temp_path.unlink(missing_ok=True)
-            raise
-    try:
-        os.replace(temp_path, out_path)
-    finally:
-        temp_path.unlink(missing_ok=True)
+    # Keep the full history and one-record dashboard snapshot consistent.
+    # The snapshot is derived data; the full archive remains the source of truth.
+    _atomic_write_json(out_path, old_data[:100])
+    latest_out_path = out_path.with_name(f"{out_path.stem}-latest{out_path.suffix}")
+    _atomic_write_json(latest_out_path, [old_data[0]])
     return record
 
 
