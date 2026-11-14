@@ -1,0 +1,295 @@
+(function (root) {
+  "use strict";
+
+  const LATEST_URL =
+    "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json";
+  const ARCHIVE_URL =
+    "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json";
+  const REFRESH_MS = 5 * 60 * 1000;
+  const RETRY_MS = 30 * 1000;
+  const MANUAL_REFRESH_COOLDOWN_MS = 30 * 1000;
+  const REQUEST_TIMEOUT_MS = 10 * 1000;
+  const MAX_EXPERIMENTS = 50;
+  const STORAGE_KEY = "aether.archive.preview.v2";
+  const SNAPSHOT_MISSING_KEY = "aether.archive.preview.snapshot-missing-until.v1";
+  const SNAPSHOT_MISSING_RECHECK_MS = 15 * 60 * 1000;
+
+  function isUsableArchive(data) {
+    const latest = Array.isArray(data) ? data[0] : null;
+    return Boolean(
+      latest &&
+      typeof latest === "object" &&
+      !Array.isArray(latest) &&
+      typeof latest.time === "string" &&
+      !Number.isNaN(Date.parse(latest.time)) &&
+      Array.isArray(latest.experiments)
+    );
+  }
+
+  function createController(options) {
+    const doc = options.document;
+    const fetchImpl = options.fetchImpl;
+    const now = options.now || Date.now;
+    const setTimeoutImpl = options.setTimeoutImpl || setTimeout;
+    const clearTimeoutImpl = options.clearTimeoutImpl || clearTimeout;
+    const AbortControllerImpl = options.AbortControllerImpl || AbortController;
+    const storage = options.storage || null;
+
+    let inFlight = false;
+    let hasDisplayedArchive = false;
+    let lastManualAt = -Infinity;
+    let nextAllowedAt = -Infinity;
+    let timer = null;
+    let snapshotMissingUntil = 0;
+    try {
+      snapshotMissingUntil = Number(storage && storage.getItem(SNAPSHOT_MISSING_KEY)) || 0;
+    } catch (_) {}
+    if (snapshotMissingUntil <= now()) snapshotMissingUntil = 0;
+
+    function setStatus(message) {
+      doc.getElementById("status").textContent = message;
+    }
+
+    function schedule(delay) {
+      if (timer !== null) clearTimeoutImpl(timer);
+      timer = setTimeoutImpl(function () {
+        timer = null;
+        void refresh(false);
+      }, delay);
+    }
+
+    function render(data, statusMessage) {
+      const latest = data[0];
+      const timestamp = new Date(latest.time).toLocaleString();
+      const summary = doc.getElementById("summary");
+      const body = doc.getElementById("experiments");
+      const note = doc.getElementById("note");
+
+      summary.textContent = data.length > 1
+        ? data.length + " archived cycles · latest: " + timestamp
+        : "Latest archived cycle: " + timestamp;
+      setStatus(statusMessage || "Latest archive record loaded");
+      body.replaceChildren();
+
+      const experiments = latest.experiments.slice(0, MAX_EXPERIMENTS);
+      for (const experiment of experiments) {
+        const row = doc.createElement("tr");
+        const values = [
+          String(experiment && experiment.name || "Unnamed experiment"),
+          experiment && experiment.category === "known_baseline"
+            ? "Known baseline"
+            : experiment && experiment.category === "candidate"
+              ? "Unverified candidate"
+              : "Simulated statistic",
+          String(experiment && experiment.observed != null ? experiment.observed : ""),
+          String(experiment && experiment.expected != null ? experiment.expected : ""),
+          String(experiment && experiment.z_score != null ? experiment.z_score : ""),
+          experiment && experiment.flag ? "Review flag" : "No flag"
+        ];
+        for (const value of values) {
+          const cell = doc.createElement("td");
+          cell.textContent = value;
+          row.appendChild(cell);
+        }
+        body.appendChild(row);
+      }
+
+      if (experiments.length === 0) {
+        const row = doc.createElement("tr");
+        const cell = doc.createElement("td");
+        cell.textContent = "No experiment records in the latest cycle.";
+        row.appendChild(cell);
+        body.appendChild(row);
+      }
+
+      const truncated = latest.experiments.length > MAX_EXPERIMENTS;
+      const errorSummary = Array.isArray(latest.errors)
+        ? latest.errors.length + " recorded cycle errors. "
+        : "Cycle-level error details are not included in this archive. ";
+      const interpretation = typeof latest.interpretation === "string"
+        ? latest.interpretation + " "
+        : "";
+      const caution = /not discoveries/i.test(interpretation)
+        ? ""
+        : "Statistical flags are prompts for replication, not discoveries.";
+      note.textContent =
+        (truncated ? "Showing " + MAX_EXPERIMENTS + " of " + latest.experiments.length + " experiments. " : "") +
+        errorSummary + interpretation + caution;
+    }
+
+    function readCachedArchive() {
+      if (!storage || typeof storage.getItem !== "function") return null;
+      try {
+        const raw = storage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        return isUsableArchive(cached) ? cached : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function saveCachedArchive(data) {
+      if (!storage || typeof storage.setItem !== "function") return false;
+      try {
+        storage.setItem(STORAGE_KEY, JSON.stringify(data));
+        hasDisplayedArchive = true;
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function rememberMissingSnapshot() {
+      snapshotMissingUntil = now() + SNAPSHOT_MISSING_RECHECK_MS;
+      try {
+        if (storage && typeof storage.setItem === "function") {
+          storage.setItem(SNAPSHOT_MISSING_KEY, String(snapshotMissingUntil));
+        }
+      } catch (_) {}
+    }
+
+    function clearMissingSnapshot() {
+      if (!snapshotMissingUntil) return;
+      snapshotMissingUntil = 0;
+      try {
+        if (storage && typeof storage.removeItem === "function") {
+          storage.removeItem(SNAPSHOT_MISSING_KEY);
+        } else if (storage && typeof storage.setItem === "function") {
+          storage.setItem(SNAPSHOT_MISSING_KEY, "0");
+        }
+      } catch (_) {}
+    }
+
+    async function fetchArchive(cache, signal) {
+      const options = { cache, signal };
+      if (cache === "reload" || now() >= snapshotMissingUntil) {
+        const latestResponse = await fetchImpl(LATEST_URL, options);
+        if (latestResponse && latestResponse.ok) {
+          try {
+            const latestData = await latestResponse.json();
+            if (isUsableArchive(latestData)) {
+              clearMissingSnapshot();
+              return latestData;
+            }
+          } catch (_) {}
+        } else if (!latestResponse || latestResponse.status !== 404) {
+          throw new Error("archive_unavailable");
+        }
+        rememberMissingSnapshot();
+      }
+
+      const archiveResponse = await fetchImpl(ARCHIVE_URL, options);
+      if (!archiveResponse || !archiveResponse.ok) {
+        throw new Error("archive_unavailable");
+      }
+      return archiveResponse.json();
+    }
+
+    async function refresh(force) {
+      if (doc.hidden || inFlight) return false;
+      if (force && now() - lastManualAt < MANUAL_REFRESH_COOLDOWN_MS) {
+        setStatus("Wait before refreshing again.");
+        return false;
+      }
+      if (!force && now() < nextAllowedAt) {
+        schedule(nextAllowedAt - now());
+        return false;
+      }
+
+      if (force) lastManualAt = now();
+      inFlight = true;
+      const button = doc.getElementById("refresh");
+      button.disabled = true;
+      const controller = new AbortControllerImpl();
+      const timeout = setTimeoutImpl(
+        function () { controller.abort(); },
+        REQUEST_TIMEOUT_MS
+      );
+
+      try {
+        const data = await fetchArchive(
+          force ? "reload" : "default",
+          controller.signal
+        );
+        if (!isUsableArchive(data)) throw new Error("archive_invalid");
+
+        render(data);
+        hasDisplayedArchive = true;
+        saveCachedArchive(data);
+        nextAllowedAt = now() + REFRESH_MS;
+        schedule(REFRESH_MS);
+        return true;
+      } catch (_) {
+        if (hasDisplayedArchive) {
+            setStatus("Archive update unavailable; showing last good copy (may be stale). The Flask API was not contacted.");
+        } else {
+          doc.getElementById("summary").textContent = "";
+          doc.getElementById("experiments").replaceChildren();
+          doc.getElementById("note").textContent =
+            "No current archive data is displayed. Statistical flags are prompts for replication, not discoveries.";
+          setStatus("Archive temporarily unavailable. The Flask API was not contacted.");
+        }
+        nextAllowedAt = now() + RETRY_MS;
+        schedule(RETRY_MS);
+        return false;
+      } finally {
+        clearTimeoutImpl(timeout);
+        inFlight = false;
+        button.disabled = false;
+      }
+    }
+
+    function bind() {
+      doc.getElementById("refresh").addEventListener("click", function () {
+        void refresh(true);
+      });
+      doc.addEventListener("visibilitychange", function () {
+        if (!doc.hidden) return refresh(false);
+      });
+    }
+
+    const cached = readCachedArchive();
+    if (cached) {
+      hasDisplayedArchive = true;
+      render(cached, "Showing saved archive while checking for updates");
+    }
+
+    return { bind, refresh };
+  }
+
+  const api = {
+    LATEST_URL,
+    ARCHIVE_URL,
+    REFRESH_MS,
+    RETRY_MS,
+    REQUEST_TIMEOUT_MS,
+    MAX_EXPERIMENTS,
+    STORAGE_KEY,
+    SNAPSHOT_MISSING_KEY,
+    SNAPSHOT_MISSING_RECHECK_MS,
+    isUsableArchive,
+    createController
+  };
+
+  root.AetherCdnPreview = api;
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = api;
+  }
+
+  if (root.document && typeof root.fetch === "function") {
+    let storage = null;
+    try { storage = root.localStorage; } catch (_) {}
+    const controller = createController({
+      document: root.document,
+      fetchImpl: root.fetch.bind(root),
+      now: function () { return Date.now(); },
+      setTimeoutImpl: root.setTimeout.bind(root),
+      clearTimeoutImpl: root.clearTimeout.bind(root),
+      AbortControllerImpl: root.AbortController,
+      storage
+    });
+    controller.bind();
+    void controller.refresh(false);
+  }
+})(globalThis);

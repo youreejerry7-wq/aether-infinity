@@ -1,0 +1,201 @@
+name: AETHER CDN preview checks
+on:
+  pull_request:
+    paths:
+      - 'cdn-preview/**'
+      - 'tests/test_cdn_preview.cjs'
+      - 'tests/test_archive_diff_guard.cjs'
+      - 'tests/measure_public_latency.py'
+      - 'tests/test_measure_public_latency.py'
+      - 'data/research.json'
+      - 'data/research-latest.json'
+      - '.github/workflows/cdn-preview.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Test archive guard against base-branch updates
+        run: node --test tests/test_archive_diff_guard.cjs
+      - name: Reject changes to the scheduled research archive
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The PR event's base SHA can predate later scheduled archive updates.
+          # Compare against the current base branch so a review-branch sync does
+          # not look like an unauthorized archive edit.
+          git fetch --no-tags origin "+refs/heads/${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
+          if git diff --quiet "origin/${PR_BASE_REF}...${PR_HEAD_SHA}" -- data/research.json data/research-latest.json; then
+            echo "PASS: PR does not modify the scheduled archive or compact snapshot."
+          else
+            echo "::error::This PR modifies generated research data; both files are maintained only by the scheduled research workflow."
+            exit 1
+          fi
+      - name: Test cache, throttling, visibility, bounds, and safe rendering
+        run: node --test tests/test_cdn_preview.cjs
+      - name: Test compressed and identity HTTP body decoding
+        run: python -m unittest discover -s tests -p 'test_measure_public_latency.py'
+      - name: Verify the public archive supports browser cross-origin reads
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json"
+          curl --fail --silent --show-error --location \
+            --dump-header "$RUNNER_TEMP/archive.headers" \
+            --output "$RUNNER_TEMP/research.json" \
+            --write-out 'HTTP %{http_code}; bytes=%{size_download}; total=%{time_total}s\\n' \
+            "$archive_url"
+          # The frontend uses cache: "default"; require a positive origin cache lifetime.
+          grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/archive.headers"
+          grep -Ei '^cache-control:|^etag:' "$RUNNER_TEMP/archive.headers"
+          grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
+          python - "$RUNNER_TEMP/research.json" <<'PY'
+          import json
+          import sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              archive = json.load(handle)
+          assert isinstance(archive, list) and archive, "archive must be a nonempty list"
+          latest = archive[0]
+          assert isinstance(latest, dict), "latest cycle must be an object"
+          assert isinstance(latest.get("experiments"), list), "latest experiments must be a list"
+          print(f"Archive JSON valid: {len(archive)} cycles; latest timestamp present={bool(latest.get('time'))}")
+          PY
+          node - "$RUNNER_TEMP/research.json" <<'NODE'
+          const fs = require("node:fs");
+          const { isUsableArchive } = require("./cdn-preview/app.js");
+          const archive = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          if (!isUsableArchive(archive)) {
+            throw new Error("CDN preview rejects the live public archive schema");
+          }
+          console.log(`CDN preview accepts live archive schema (${archive.length} cycles)`);
+          NODE
+      - name: Verify the optional compact latest-cycle snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json"
+          latest_code=$(curl -sS -L --connect-timeout 5 --max-time 15 \
+            --dump-header "$RUNNER_TEMP/latest.headers" \
+            --output "$RUNNER_TEMP/research-latest.json" \
+            --write-out '%{http_code}' "$latest_url" || true)
+          echo "latest_snapshot HTTP=${latest_code:-000}"
+          if [ "$latest_code" = "200" ]; then
+            grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/latest.headers"
+            python - "$RUNNER_TEMP/research.json" "$RUNNER_TEMP/research-latest.json" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          archive_path, latest_path = map(Path, sys.argv[1:])
+          archive = json.loads(archive_path.read_text(encoding="utf-8"))
+          latest = json.loads(latest_path.read_text(encoding="utf-8"))
+          assert isinstance(latest, list) and len(latest) == 1
+          assert latest == [archive[0]], "compact snapshot must exactly match the full archive head"
+          archive_bytes = archive_path.stat().st_size
+          latest_bytes = latest_path.stat().st_size
+          reduction = 100 * (1 - latest_bytes / archive_bytes)
+          print(f"Compact snapshot: {latest_bytes} bytes vs {archive_bytes} full-archive bytes ({reduction:.1f}% smaller)")
+          PY
+          elif [ "$latest_code" = "404" ]; then
+            echo "Compact snapshot is not published on main yet; the frontend's full-archive fallback remains active."
+          else
+            echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
+            exit 1
+          fi
+
+      - name: Measure first and repeat AETHER latency and payloads (read-only)
+        run: python3 tests/measure_public_latency.py
+
+  static-site-smoke:
+    # Read-only external verification of the separately deployed staging site.
+    # This does not validate or replace the existing Flask production service.
+    needs: preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify the isolated Render Static Site over public HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://aether-cdn-preview.onrender.com"
+          code=""
+          for attempt in $(seq 1 12); do
+            if metrics=$(curl -sS -L --connect-timeout 5 --max-time 8 \
+              -D "$RUNNER_TEMP/cdn-preview.headers" \
+              -o "$RUNNER_TEMP/cdn-preview.html" \
+              -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/"); then
+              read -r code ttfb total bytes <<< "$metrics"
+              echo "static_home attempt=$attempt HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+              if [ "$code" = "200" ]; then break; fi
+            fi
+            sleep 5
+          done
+          test "$code" = "200"
+          grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview.html"
+          grep -q 'script src="./app.js"' "$RUNNER_TEMP/cdn-preview.html"
+          cmp --silent "$RUNNER_TEMP/cdn-preview.html" cdn-preview/index.html
+          echo "static_home matches checked-out PR asset sha256=$(sha256sum cdn-preview/index.html | cut -d' ' -f1)"
+          grep -Ei '^content-type:|^cache-control:' "$RUNNER_TEMP/cdn-preview.headers" || true
+          grep -Eiq '^content-type:[[:space:]]*text/html' "$RUNNER_TEMP/cdn-preview.headers"
+          grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview.headers"
+
+          code=""
+          for attempt in $(seq 1 12); do
+            metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+              -D "$RUNNER_TEMP/cdn-preview-js.headers" \
+              -o "$RUNNER_TEMP/cdn-preview.js" \
+              -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/app.js" || true)
+            read -r code ttfb total bytes <<< "${metrics:-}"
+            echo "static_js attempt=$attempt HTTP=${code:-000} ttfb_seconds=${ttfb:-n/a} total_seconds=${total:-n/a} bytes=${bytes:-0}"
+            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"; then
+              break
+            fi
+            sleep 5
+          done
+          test "$code" = "200"
+          cmp --silent "$RUNNER_TEMP/cdn-preview.js" cdn-preview/app.js
+          echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)"
+          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
+          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
+          grep -q 'aether.archive.preview.snapshot-missing-until.v1' "$RUNNER_TEMP/cdn-preview.js"
+          # Catch a stale staging deploy that has not picked up the malformed-snapshot fallback.
+          grep -Fq 'const latestData = await latestResponse.json();' "$RUNNER_TEMP/cdn-preview.js"
+          grep -Fq 'if (isUsableArchive(latestData))' "$RUNNER_TEMP/cdn-preview.js"
+          grep -Fq '15 * 60 * 1000' "$RUNNER_TEMP/cdn-preview.js"
+          test "$(wc -c < "$RUNNER_TEMP/cdn-preview.js")" -le 10240
+          grep -Eiq '^content-type:.*(javascript|ecmascript)' "$RUNNER_TEMP/cdn-preview-js.headers"
+          grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview-js.headers"
+          if grep -Eq '/api/run|/api/results|/health' "$RUNNER_TEMP/cdn-preview.js"; then
+            echo "::error::Static preview unexpectedly references Flask API routes."
+            exit 1
+          fi
+
+          metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+            -o "$RUNNER_TEMP/cdn-preview-readme.md" \
+            -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/README.md")
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "static_readme HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = "200"
+          grep -q 'Current isolated Render staging preview' "$RUNNER_TEMP/cdn-preview-readme.md"
+          grep -q 'SKIP_INSTALL_DEPS=true' "$RUNNER_TEMP/cdn-preview-readme.md"
+
+          metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+            -o "$RUNNER_TEMP/cdn-preview-repeat.html" \
+            -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/")
+          read -r code ttfb total bytes <<< "$metrics"
+          echo "static_home_repeat HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
+          test "$code" = "200"
+          grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview-repeat.html"
