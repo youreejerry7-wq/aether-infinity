@@ -24,6 +24,8 @@ function commit(repo, message) {
 const ARCHIVE_PATHS = ["data/research.json", "data/research-latest.json"];
 
 function archiveDiffExitCode(repo, baseSha, headSha) {
+  // Compare the two trees directly. Three-dot syntax ignores base-only updates
+  // when a PR branch is stale and can therefore allow an old archive to win.
   const result = spawnSync(
     "git",
     ["diff", "--quiet", baseSha, headSha, "--", ...ARCHIVE_PATHS],
@@ -33,7 +35,40 @@ function archiveDiffExitCode(repo, baseSha, headSha) {
   return result.status;
 }
 
-test("stale PR archives are rejected until the branch matches the current base", () => {\n  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "aether-archive-guard-"));\n  try {\n    git(repo, "init", "-q");\n    git(repo, "branch", "-M", "main");\n    git(repo, "config", "user.name", "AETHER test");\n    git(repo, "config", "user.email", "aether-test@example.invalid");\n    write(repo, "data/research.json", "base archive\\n");\n    write(repo, "data/research-latest.json", "base latest snapshot\\n");\n    commit(repo, "base archive");\n\n    git(repo, "switch", "-c", "review/pr");\n    write(repo, "cdn-preview/index.html", "preview\\n");\n    const stalePrHead = commit(repo, "preview-only change");\n\n    git(repo, "switch", "main");\n    write(repo, "data/research.json", "new scheduled cycle\\n");\n    write(repo, "data/research-latest.json", "new scheduled snapshot\\n");\n    const currentBase = commit(repo, "scheduled archive update");\n\n    // A stale PR must fail because merging it would replace newer generated data.\n    assert.equal(archiveDiffExitCode(repo, currentBase, stalePrHead), 1);\n\n    // Once the PR branch incorporates the current base, the archive guard passes.\n    git(repo, "switch", "review/pr");\n    git(repo, "merge", "--no-ff", "main", "-m", "sync current base branch");\n    const syncedPrHead = git(repo, "rev-parse", "HEAD");\n    assert.equal(archiveDiffExitCode(repo, currentBase, syncedPrHead), 0);\n  } finally {\n    fs.rmSync(repo, { recursive: true, force: true });\n  }\n});\n\ntest("a PR that edits either generated research file is still rejected", () => {
+test("stale PR archives are rejected until the branch matches the current base", () => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), "aether-archive-guard-"));
+  try {
+    git(repo, "init", "-q");
+    git(repo, "branch", "-M", "main");
+    git(repo, "config", "user.name", "AETHER test");
+    git(repo, "config", "user.email", "aether-test@example.invalid");
+    write(repo, "data/research.json", "base archive\n");
+    write(repo, "data/research-latest.json", "base latest snapshot\n");
+    commit(repo, "base archive");
+
+    git(repo, "switch", "-c", "review/pr");
+    write(repo, "cdn-preview/index.html", "preview\n");
+    const stalePrHead = commit(repo, "preview-only change");
+
+    git(repo, "switch", "main");
+    write(repo, "data/research.json", "new scheduled cycle\n");
+    write(repo, "data/research-latest.json", "new scheduled snapshot\n");
+    const currentBase = commit(repo, "scheduled archive update");
+
+    // A stale PR must fail because merging it would replace newer generated data.
+    assert.equal(archiveDiffExitCode(repo, currentBase, stalePrHead), 1);
+
+    // Once the PR branch incorporates the current base, the archive guard passes.
+    git(repo, "switch", "review/pr");
+    git(repo, "merge", "--no-ff", "main", "-m", "sync current base branch");
+    const syncedPrHead = git(repo, "rev-parse", "HEAD");
+    assert.equal(archiveDiffExitCode(repo, currentBase, syncedPrHead), 0);
+  } finally {
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test("a PR that edits either generated research file is still rejected", () => {
   for (const editedPath of ARCHIVE_PATHS) {
     const repo = fs.mkdtempSync(path.join(os.tmpdir(), "aether-archive-guard-"));
     try {
@@ -41,12 +76,12 @@ test("stale PR archives are rejected until the branch matches the current base",
       git(repo, "branch", "-M", "main");
       git(repo, "config", "user.name", "AETHER test");
       git(repo, "config", "user.email", "aether-test@example.invalid");
-      write(repo, "data/research.json", "base archive\\n");
-      write(repo, "data/research-latest.json", "base latest snapshot\\n");
+      write(repo, "data/research.json", "base archive\n");
+      write(repo, "data/research-latest.json", "base latest snapshot\n");
       const baseSha = commit(repo, "base archive and snapshot");
 
       git(repo, "switch", "-c", "review/pr");
-      write(repo, editedPath, "PR edited generated data\\n");
+      write(repo, editedPath, "PR edited generated data\n");
       const prHead = commit(repo, "unauthorized generated-data edit");
 
       assert.equal(archiveDiffExitCode(repo, baseSha, prHead), 1, editedPath);
