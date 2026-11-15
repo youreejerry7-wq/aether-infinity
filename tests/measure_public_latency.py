@@ -1,30 +1,32 @@
 #!/usr/bin/env python3
-"""Read-only first-observation/repeat latency and payload probe for AETHER.
+"""Read-only first-observation and warm-repeat latency/payload probe for AETHER.
 
 The first sample is NOT guaranteed to be a cold start. It is simply the first
-request made by this GitHub-hosted runner; the immediate repeat is a warm
-follow-up candidate. No response bodies are printed or persisted.
+request made by this GitHub-hosted runner; subsequent requests are warm repeats.
+No response bodies are printed or persisted.
 
-Requests advertise gzip support, then count the received wire bytes separately
-from the decoded body size. This measures the actual transfer representation
-used by a normal browser without confusing compressed and uncompressed sizes.
+Requests advertise gzip support, then count received wire bytes separately
+from decoded body size. Warm summaries use the median and maximum of successful
+repeat samples; they are not claims about global user experience.
 """
 import gzip
 import json
+import statistics
 import time
 import urllib.error
 import urllib.request
 
 BASE = "https://aether-infinity.onrender.com"
+CDN = "https://aether-cdn-preview.onrender.com"
 RAW = "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity"
-BRANCH = "review/cdn-readonly-preview-20261107"
 TARGETS = [
-    # Hit the homepage first so this run's first request can reveal a sleeping-service delay.
-    ("aether_home", BASE + "/", 55, 2),
-    ("aether_health", BASE + "/health", 55, 2),
-    ("preview_html_source", f"{RAW}/{BRANCH}/cdn-preview/index.html", 25, 1),
-    ("preview_js_source", f"{RAW}/{BRANCH}/cdn-preview/app.js", 25, 1),
-    ("public_archive", f"{RAW}/main/data/research.json", 25, 1),
+    # Hit the Flask homepage first so an idle-service wake-up can be observed.
+    ("aether_home", BASE + "/", 55, 4),
+    ("aether_health", BASE + "/health", 55, 4),
+    # Measure the actual isolated static site, not just its GitHub source files.
+    ("cdn_preview_home", CDN + "/", 20, 4),
+    ("cdn_preview_js", CDN + "/app.js", 20, 4),
+    ("public_archive", f"{RAW}/main/data/research.json", 25, 4),
 ]
 
 
@@ -36,6 +38,27 @@ def decode_body(body, content_encoding):
     if encoding == "gzip":
         return gzip.decompress(body)
     raise ValueError("Unsupported content encoding: " + encoding)
+
+
+def summarize_warm_samples(records):
+    """Summarize successful repeat timings, excluding the first observation."""
+    warm = [
+        record for record in records
+        if str(record.get("sample", "")).startswith("warm_repeat_")
+        and isinstance(record.get("ttfb_ms"), (int, float))
+        and isinstance(record.get("total_ms"), (int, float))
+    ]
+    if not warm:
+        return None
+    ttfb = [record["ttfb_ms"] for record in warm]
+    total = [record["total_ms"] for record in warm]
+    return {
+        "count": len(warm),
+        "median_ttfb_ms": round(statistics.median(ttfb), 2),
+        "max_ttfb_ms": round(max(ttfb), 2),
+        "median_total_ms": round(statistics.median(total), 2),
+        "max_total_ms": round(max(total), 2),
+    }
 
 
 def request_once(label, url, sample, timeout):
@@ -60,7 +83,6 @@ def request_once(label, url, sample, timeout):
                 "status": response.status,
                 "ttfb_ms": round((headers_at - started) * 1000, 2),
                 "total_ms": round((finished - started) * 1000, 2),
-                # bytes is retained as the actual transferred body size.
                 "bytes": len(wire_body),
                 "decoded_bytes": len(decoded_body),
                 "wire_fraction": round(len(wire_body) / len(decoded_body), 4)
@@ -99,8 +121,9 @@ def request_once(label, url, sample, timeout):
 def main():
     failures = []
     for label, url, timeout, samples in TARGETS:
+        observations = []
         for index in range(samples):
-            sample = "first_observation" if index == 0 else "immediate_repeat"
+            sample = "first_observation" if index == 0 else f"warm_repeat_{index}"
             success = False
             for attempt in range(1, 3):
                 record, success = request_once(label, url, sample, timeout)
@@ -115,8 +138,16 @@ def main():
                     time.sleep(2)
                     continue
                 break
+            observations.append(record)
             if not success:
                 failures.append(label + "/" + sample)
+        summary = summarize_warm_samples(observations)
+        if summary:
+            print(json.dumps({
+                "target": label,
+                "sample": "warm_summary",
+                **summary,
+            }, sort_keys=True), flush=True)
     if failures:
         raise SystemExit("Public smoke checks failed: " + ", ".join(failures))
     print("PASS: all read-only public HTTP observations returned 2xx.")
