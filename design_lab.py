@@ -163,6 +163,86 @@ def run(seed=SEED):
     }
 
 
+def distributional_holdout_report(
+    candidate_cut,
+    negative_control_cut=NEGATIVE_CONTROL_CUT,
+    seed=20261103,
+    case_count=200,
+):
+    """Evaluate fixed candidate/control cuts on a separate seeded size range.
+
+    This broader synthetic holdout is generated independently of training.
+    It is a robustness diagnostic over the stated rectangle ranges, not a
+    confidence interval, population guarantee, novelty check, or physical test.
+    """
+    if not isinstance(case_count, int) or isinstance(case_count, bool) or case_count <= 0:
+        raise ValueError("case_count must be a positive integer")
+
+    width_range = (18.0, 22.0)
+    height_range = (28.0, 32.0)
+    for cut in (BASELINE_CUT, candidate_cut, negative_control_cut):
+        if not math.isfinite(cut) or cut <= 0 or cut >= min(width_range[0], height_range[0]) / 2:
+            raise ValueError("All cuts must be finite, positive, and feasible across the holdout range")
+
+    rng = random.Random(seed)
+    candidate_deltas = []
+    negative_deltas = []
+    for _ in range(case_count):
+        width = rng.uniform(*width_range)
+        height = rng.uniform(*height_range)
+        baseline_volume = box_volume(width, height, BASELINE_CUT)
+        candidate_deltas.append(
+            box_volume(width, height, candidate_cut) - baseline_volume
+        )
+        negative_deltas.append(
+            box_volume(width, height, negative_control_cut) - baseline_volume
+        )
+
+    def summarize(values):
+        ordered = sorted(values)
+        p05_index = max(0, math.ceil(0.05 * len(ordered)) - 1)
+        positive_count = sum(value > 0 for value in ordered)
+        return {
+            "mean_improvement_cm3": round(statistics.fmean(ordered), 6),
+            "median_improvement_cm3": round(statistics.median(ordered), 6),
+            "minimum_improvement_cm3": round(ordered[0], 6),
+            "fifth_percentile_nearest_rank_cm3": round(ordered[p05_index], 6),
+            "maximum_improvement_cm3": round(ordered[-1], 6),
+            "positive_cases": positive_count,
+            "positive_fraction": round(positive_count / len(ordered), 6),
+        }
+
+    candidate_summary = summarize(candidate_deltas)
+    negative_summary = summarize(negative_deltas)
+    return {
+        "method": "independent seeded synthetic rectangular-sheet holdout",
+        "seed": seed,
+        "case_count": case_count,
+        "width_cm_range": list(width_range),
+        "height_cm_range": list(height_range),
+        "baseline_cut_cm": BASELINE_CUT,
+        "candidate_cut_cm": candidate_cut,
+        "negative_control_cut_cm": negative_control_cut,
+        "box_volume_evaluations": 3 * case_count,
+        "candidate": {
+            **candidate_summary,
+            "passed_all_sampled_cases": candidate_summary["positive_cases"] == case_count,
+            "evidence_level": "simulation_candidate",
+        },
+        "negative_control": {
+            **negative_summary,
+            "rejected_on_all_sampled_cases": negative_summary["positive_cases"] == 0,
+            "evidence_level": "rejected_simulation_candidate",
+        },
+        "interpretation": (
+            "Finite synthetic robustness sample over the declared ranges only; "
+            "not a statistical population guarantee, patent search, or physical validation."
+        ),
+        "novelty_status": "not_assessed",
+        "physical_validation": False,
+    }
+
+
 def run_measured(seed=SEED):
     """Measure repeated in-process runs; keep timing out of the deterministic core report."""
     for _ in range(BENCHMARK_WARMUP_REPETITIONS):
@@ -224,5 +304,16 @@ def run_measured(seed=SEED):
     return report
 
 
+def run_complete_report(seed=SEED):
+    """Combine the timed training search with a separately seeded holdout report."""
+    report = run_measured(seed)
+    report["distributional_holdout"] = distributional_holdout_report(
+        candidate_cut=report["candidate"]["cut_cm"],
+        negative_control_cut=report["negative_control"]["cut_cm"],
+        seed=seed + 1,
+    )
+    return report
+
+
 if __name__ == "__main__":
-    print(json.dumps(run_measured(), indent=2, sort_keys=True))
+    print(json.dumps(run_complete_report(), indent=2, sort_keys=True))
