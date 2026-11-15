@@ -38,7 +38,7 @@ jobs:
           # Compare against the current base branch so a review-branch sync does
           # not look like an unauthorized archive edit.
           git fetch --no-tags origin "+refs/heads/${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
-          if git diff --quiet "origin/${PR_BASE_REF}...${PR_HEAD_SHA}" -- data/research.json data/research-latest.json; then
+          if git diff --quiet "origin/${PR_BASE_REF}" "${PR_HEAD_SHA}" -- data/research.json data/research-latest.json; then
             echo "PASS: PR does not modify the scheduled archive or compact snapshot."
           else
             echo "::error::This PR modifies generated research data; both files are maintained only by the scheduled research workflow."
