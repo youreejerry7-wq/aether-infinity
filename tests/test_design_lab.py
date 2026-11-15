@@ -210,5 +210,75 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertNotIn("performance", lab.run())
 
 
+    def test_distributional_holdout_is_reproducible_and_uses_separate_seed(self):
+        candidate = lab.distributional_holdout_report(4.0, 7.5)
+        repeated = lab.distributional_holdout_report(4.0, 7.5)
+        changed_seed = lab.distributional_holdout_report(4.0, 7.5, seed=20261104)
+
+        self.assertEqual(candidate, repeated)
+        self.assertNotEqual(candidate["candidate"], changed_seed["candidate"])
+        self.assertEqual(candidate["seed"], 20261103)
+        self.assertEqual(candidate["case_count"], 200)
+        self.assertEqual(candidate["width_cm_range"], [18.0, 22.0])
+        self.assertEqual(candidate["height_cm_range"], [28.0, 32.0])
+        self.assertEqual(candidate["box_volume_evaluations"], 600)
+        self.assertEqual(candidate["candidate_cut_cm"], 4.0)
+        self.assertEqual(candidate["negative_control_cut_cm"], 7.5)
+
+        selected = candidate["candidate"]
+        self.assertEqual(selected["positive_cases"], 200)
+        self.assertTrue(selected["passed_all_sampled_cases"])
+        self.assertAlmostEqual(selected["mean_improvement_cm3"], 232.509111, places=6)
+        self.assertAlmostEqual(selected["minimum_improvement_cm3"], 133.090258, places=6)
+        self.assertAlmostEqual(
+            selected["fifth_percentile_nearest_rank_cm3"], 163.365045, places=6
+        )
+        self.assertEqual(selected["evidence_level"], "simulation_candidate")
+
+        rejected = candidate["negative_control"]
+        self.assertEqual(rejected["positive_cases"], 0)
+        self.assertTrue(rejected["rejected_on_all_sampled_cases"])
+        self.assertAlmostEqual(rejected["mean_improvement_cm3"], -258.650827, places=6)
+        self.assertEqual(rejected["evidence_level"], "rejected_simulation_candidate")
+        self.assertEqual(candidate["novelty_status"], "not_assessed")
+        self.assertFalse(candidate["physical_validation"])
+        self.assertIn("not a statistical population guarantee", candidate["interpretation"])
+
+    def test_distributional_holdout_rejects_invalid_budgets_and_infeasible_cuts(self):
+        invalid = (
+            (4.0, 7.5, 0),
+            (4.0, 7.5, True),
+            (4.0, 7.5, 1.5),
+            (9.0, 7.5, 200),
+            (float("nan"), 7.5, 200),
+            (4.0, 9.0, 200),
+        )
+        for candidate, negative, count in invalid:
+            with self.subTest(candidate=candidate, negative=negative, count=count):
+                with self.assertRaises(ValueError):
+                    lab.distributional_holdout_report(candidate, negative, case_count=count)
+
+    def test_complete_report_includes_separate_distributional_holdout(self):
+        from unittest.mock import patch
+
+        sample = {
+            "seed": 2026,
+            "candidate": {"cut_cm": 4.0},
+            "negative_control": {"cut_cm": 7.5},
+        }
+        holdout = {"seed": 2027, "case_count": 200}
+        with patch.object(lab, "run_measured", return_value=sample) as measured:
+            with patch.object(
+                lab, "distributional_holdout_report", return_value=holdout
+            ) as distributional:
+                report = lab.run_complete_report(seed=2026)
+
+        measured.assert_called_once_with(2026)
+        distributional.assert_called_once_with(
+            candidate_cut=4.0, negative_control_cut=7.5, seed=2027
+        )
+        self.assertIs(report["distributional_holdout"], holdout)
+
+
 if __name__ == "__main__":
     unittest.main()
