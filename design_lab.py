@@ -21,6 +21,10 @@ CUT_GRID = tuple(step / 2 for step in range(1, 19))  # 0.5 to 9.0 cm
 BASELINE_CUT = 2.0
 NEGATIVE_CONTROL_CUT = 7.5  # Feasible on every holdout; intentionally suboptimal
 
+BENCHMARK_WARMUP_REPETITIONS = 5
+BENCHMARK_BATCHES = 5
+BENCHMARK_REPETITIONS_PER_BATCH = 100
+
 # Checked against the cited public textbook example on 2026-11-02.
 # This establishes that the mathematical model is prior art, not a new invention.
 PRIOR_ART = (
@@ -154,27 +158,65 @@ def run(seed=SEED):
         "novelty_status": "not_assessed",
         "novelty_scope": "The geometry and optimization are known textbook examples; no patent search or novelty claim for any new implementation.",
         "physical_validation": False,
-        "uncertainty": "Only three fixed holdout sheet sizes; no manufacturing tolerances, materials, folds, costs, or independent physical replication modeled.",
-        "safety_scope": "Noncritical mathematical geometry demonstration only.",
-    }
+        "uncertainty": "Only three fixed holdout sheet sizes; no manufacturing tolerances, materials, folds, costs, or independent physical replication modeledef run_measured(seed=SEED):
+    """Measure repeated in-process runs; keep timing out of the deterministic core report."""
+    for _ in range(BENCHMARK_WARMUP_REPETITIONS):
+        run(seed)
 
+    seconds_per_run = []
+    for _ in range(BENCHMARK_BATCHES):
+        started = time.perf_counter()
+        for _ in range(BENCHMARK_REPETITIONS_PER_BATCH):
+            run(seed)
+        elapsed = time.perf_counter() - started
+        seconds_per_run.append(elapsed / BENCHMARK_REPETITIONS_PER_BATCH)
 
-def run_measured(seed=SEED):
-    """Add local timing to the deterministic report without making run() nondeterministic."""
-    started = time.perf_counter()
     report = run(seed)
-    elapsed = time.perf_counter() - started
+    median_seconds_per_run = statistics.median(seconds_per_run)
     evaluations = report["workload"]["total_box_volume_evaluations"]
     hypotheses = report["workload"]["hypotheses_evaluated"]
+    seconds_per_hypothesis = (
+        median_seconds_per_run / hypotheses if hypotheses > 0 else None
+    )
     report["performance"] = {
-        "elapsed_seconds": round(elapsed, 6),
-        "hypotheses_evaluated": hypotheses,
-        "seconds_per_hypothesis": round(elapsed / hypotheses, 6),
-        "box_volume_evaluations_per_second": (
-            round(evaluations / elapsed, 2) if elapsed > 0 else None
+        "benchmark_batches": BENCHMARK_BATCHES,
+        "repetitions_per_batch": BENCHMARK_REPETITIONS_PER_BATCH,
+        "warmup_repetitions": BENCHMARK_WARMUP_REPETITIONS,
+        "measured_repetitions": BENCHMARK_BATCHES * BENCHMARK_REPETITIONS_PER_BATCH,
+        "elapsed_seconds": round(sum(seconds_per_run) * BENCHMARK_REPETITIONS_PER_BATCH, 6),
+        "median_seconds_per_run": round(median_seconds_per_run, 6),
+        "seconds_per_hypothesis": (
+            round(seconds_per_hypothesis, 6)
+            if seconds_per_hypothesis is not None else None
         ),
-        "measurement_scope": "run() only; excludes interpreter startup and JSON serialization",
-        "comparability": "Local diagnostic only; hardware and system load are not normalized.",
+        "min_seconds_per_hypothesis": (
+            round(min(seconds_per_run) / hypotheses, 6)
+            if hypotheses > 0 else None
+        ),
+        "max_seconds_per_hypothesis": (
+            round(max(seconds_per_run) / hypotheses, 6)
+            if hypotheses > 0 else None
+        ),
+        "hypotheses_per_second": (
+            round(hypotheses / median_seconds_per_run, 2)
+            if median_seconds_per_run > 0 else None
+        ),
+        "box_volume_evaluations_per_second": (
+            round(evaluations / median_seconds_per_run, 2)
+            if median_seconds_per_run > 0 else None
+        ),
+        "measurement_scope": (
+            "Median of 5 batches of 100 in-process run() calls; includes training, "
+            "grid scoring, analytic reference, and holdout checks; excludes interpreter "
+            "startup and JSON serialization."
+        ),
+        "comparability": (
+            "Diagnostic only; CPU model/quota, system load, runner image, and energy "
+            "are not normalized. Compare only with the same code, runner, and protocol."
+        ),
+    }
+    return report
+Local diagnostic only; hardware and system load are not normalized.",
     }
     return report
 
