@@ -11,6 +11,7 @@ from speed_lab import (
     METHODS,
     allocate_sampling_budget,
     _calibrated_sample_counts,
+    _bootstrap_uncertainty,
     antithetic_1d,
     benchmark,
     benchmark_matched_time,
@@ -69,6 +70,35 @@ class SpeedLabTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 benchmark(**kwargs)
 
+    def test_bootstrap_uncertainty_is_reproducible_and_validated(self):
+        errors = [-0.2, 0.1, -0.05, 0.3, -0.1, 0.04]
+        durations = [0.010, 0.012, 0.009, 0.011, 0.010, 0.013]
+        first = _bootstrap_uncertainty(errors, durations, seed=19, resamples=250)
+        second = _bootstrap_uncertainty(errors, durations, seed=19, resamples=250)
+        self.assertEqual(first, second)
+        self.assertEqual(first["method"], "paired_within_method_percentile_bootstrap")
+        self.assertEqual(first["confidence_level"], 0.95)
+        self.assertEqual(first["resamples"], 250)
+        self.assertEqual(first["replications"], len(errors))
+        self.assertIsNotNone(first["replicate_count_warning"])
+        for interval in (first["rmse"], first["rmse_squared_median_seconds"]):
+            self.assertLessEqual(interval["lower"], interval["upper"])
+            self.assertTrue(math.isfinite(interval["lower"]))
+            self.assertTrue(math.isfinite(interval["upper"]))
+        self.assertIn("cross-machine", first["scope"])
+
+        invalid_cases = (
+            (errors[:-1], durations, 19, 250),
+            ([0.1], [0.01], 19, 250),
+            (errors, [0.01, 0.01, 0.01, 0.01, 0.01, 0.0], 19, 250),
+            (errors, durations, True, 250),
+            (errors, durations, 19, 99),
+        )
+        for invalid in invalid_cases:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    _bootstrap_uncertainty(*invalid)
+
     def test_benchmark_reports_valid_comparative_metrics(self):
         result = benchmark(samples=1000, replicates=3, seed=2)
         self.assertEqual(result["samples_per_replication"], 1000)
@@ -78,6 +108,10 @@ class SpeedLabTests(unittest.TestCase):
             self.assertTrue(math.isfinite(metrics["rmse"]))
             self.assertGreaterEqual(metrics["median_seconds_per_replication"], 0)
             self.assertGreater(metrics["rmse_improvement_factor_vs_baseline"], 0)
+            uncertainty = metrics["bootstrap_uncertainty"]
+            self.assertEqual(uncertainty["resamples"], BOOTSTRAP_RESAMPLES if "BOOTSTRAP_RESAMPLES" in globals() else 2000)
+            self.assertEqual(uncertainty["replications"], 3)
+            self.assertLessEqual(uncertainty["rmse"]["lower"], uncertainty["rmse"]["upper"])
 
     def test_analytic_errors_and_observed_error_time_are_explicit(self):
         data = benchmark(samples=1000, replicates=4, seed=17)
@@ -217,6 +251,9 @@ class SpeedLabTests(unittest.TestCase):
                                      metrics["max_observed_seconds"])
                 self.assertTrue(math.isfinite(metrics["rmse"]))
                 self.assertGreater(metrics["theoretical_standard_error"], 0)
+                uncertainty = metrics["bootstrap_uncertainty"]
+                self.assertEqual(uncertainty["replications"], data["replications"])
+                self.assertLessEqual(uncertainty["rmse"]["lower"], uncertainty["rmse"]["upper"])
                 self.assertAlmostEqual(
                     metrics["observed_rmse_squared_seconds"],
                     metrics["rmse"] ** 2 * metrics["median_observed_seconds"],
