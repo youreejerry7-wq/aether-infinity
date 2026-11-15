@@ -22,7 +22,7 @@ jobs:
           import re
           workflow = Path(".github/workflows/research.yml").read_text()
           assert "cron: '17 * * * *'" in workflow, "hourly schedule changed"
-          assert "git add data/research.json" in workflow, "archive-only staging missing"
+          assert "git add data/research.json data/research-latest.json" in workflow, "full archive and compact snapshot must both be staged"
           assert 'git diff --cached --quiet ||' in workflow, "unchanged-file guard missing"
           assert 'git push)' in workflow, "push missing"
           match = re.search(r'git commit -m "([^"]+)"', workflow)

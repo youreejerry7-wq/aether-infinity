@@ -121,3 +121,14 @@ def test_synthetic_archive_commits_do_not_trigger_render_deploys():
     workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/research.yml").read_text()
     assert "git add data/research.json data/research-latest.json" in workflow
     assert 'git commit -m "Record scheduled research cycle [skip render]"' in workflow
+
+def test_compact_snapshot_matches_full_archive_head():
+    """The compact dashboard feed must represent the newest archived cycle."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    archive = json.loads((root / "data" / "research.json").read_text(encoding="utf-8"))
+    snapshot = json.loads((root / "data" / "research-latest.json").read_text(encoding="utf-8"))
+
+    assert isinstance(archive, list) and archive
+    assert snapshot == [archive[0]]
