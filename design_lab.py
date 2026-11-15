@@ -24,6 +24,7 @@ NEGATIVE_CONTROL_CUT = 7.5  # Feasible on every holdout; intentionally suboptima
 BENCHMARK_WARMUP_REPETITIONS = 5
 BENCHMARK_BATCHES = 5
 BENCHMARK_REPETITIONS_PER_BATCH = 100
+MAX_DISTRIBUTIONAL_HOLDOUT_CASES = 5000
 
 # Checked against the cited public textbook example on 2026-11-02.
 # This establishes that the mathematical model is prior art, not a new invention.
@@ -175,8 +176,14 @@ def distributional_holdout_report(
     It is a robustness diagnostic over the stated rectangle ranges, not a
     confidence interval, population guarantee, novelty check, or physical test.
     """
-    if not isinstance(case_count, int) or isinstance(case_count, bool) or case_count <= 0:
-        raise ValueError("case_count must be a positive integer")
+    if (
+        not isinstance(case_count, int)
+        or isinstance(case_count, bool)
+        or not 0 < case_count <= MAX_DISTRIBUTIONAL_HOLDOUT_CASES
+    ):
+        raise ValueError(
+            f"case_count must be an integer from 1 to {MAX_DISTRIBUTIONAL_HOLDOUT_CASES}"
+        )
 
     width_range = (18.0, 22.0)
     height_range = (28.0, 32.0)
