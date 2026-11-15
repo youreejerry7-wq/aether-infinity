@@ -1,36 +1,36 @@
 [
   {
-    "time": "2026-11-14T22:59:16.957862+00:00",
+    "time": "2026-11-15T02:41:02.808231+00:00",
     "experiments": [
       {
         "name": "Fair coin frequency",
-        "observed": 0.50203,
+        "observed": 0.50205,
         "expected": 0.5,
-        "z_score": 1.284,
+        "z_score": 1.297,
         "trials": 100000,
         "flag": false
       },
       {
         "name": "Uniform threshold frequency",
-        "observed": 0.2495,
+        "observed": 0.24863,
         "expected": 0.25,
-        "z_score": -0.365,
+        "z_score": -1.001,
         "trials": 100000,
         "flag": false
       },
       {
         "name": "Monte Carlo pi estimation",
-        "observed": 3.14132,
+        "observed": 3.13872,
         "expected": 3.141593,
-        "z_score": -0.053,
+        "z_score": -0.553,
         "trials": 100000,
         "flag": false
       },
       {
         "name": "Rare-event frequency",
-        "observed": 0.0198,
+        "observed": 0.019845,
         "expected": 0.02,
-        "z_score": -0.639,
+        "z_score": -0.495,
         "trials": 200000,
         "flag": false
       }
