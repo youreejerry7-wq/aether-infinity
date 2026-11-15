@@ -171,17 +171,42 @@ class BoxDesignLabTests(unittest.TestCase):
         })
         self.assertEqual(report["workload"], lab.run()["workload"])
 
-    def test_measured_run_reports_time_and_throughput_separately(self):
+    def test_measured_run_uses_batched_median_and_reports_throughput(self):
         from unittest.mock import patch
-        with patch.object(lab.time, "perf_counter", side_effect=(10.0, 10.5)):
-            report = lab.run_measured()
+
+        sample = {
+            "workload": {
+                "total_box_volume_evaluations": 164,
+                "hypotheses_evaluated": 1,
+            }
+        }
+        timings = (
+            10.0, 10.1,
+            20.0, 20.2,
+            30.0, 30.3,
+            40.0, 40.2,
+            50.0, 50.5,
+        )
+        with patch.object(lab, "run", return_value=sample) as run_mock:
+            with patch.object(lab.time, "perf_counter", side_effect=timings):
+                report = lab.run_measured()
+
         metrics = report["performance"]
-        self.assertEqual(metrics["elapsed_seconds"], 0.5)
-        self.assertEqual(metrics["seconds_per_hypothesis"], 0.5)
-        self.assertEqual(metrics["box_volume_evaluations_per_second"], 328.0)
-        self.assertEqual(metrics["hypotheses_evaluated"], 1)
-        self.assertIn("excludes interpreter startup", metrics["measurement_scope"])
-        # The core report remains reproducible; timing is added only by the CLI wrapper.
+        self.assertEqual(run_mock.call_count, 5 + 5 * 100 + 1)
+        self.assertEqual(metrics["benchmark_batches"], 5)
+        self.assertEqual(metrics["repetitions_per_batch"], 100)
+        self.assertEqual(metrics["warmup_repetitions"], 5)
+        self.assertEqual(metrics["measured_repetitions"], 500)
+        self.assertEqual(metrics["elapsed_seconds"], 1.3)
+        self.assertEqual(metrics["median_seconds_per_run"], 0.002)
+        self.assertEqual(metrics["seconds_per_hypothesis"], 0.002)
+        self.assertEqual(metrics["min_seconds_per_hypothesis"], 0.001)
+        self.assertEqual(metrics["max_seconds_per_hypothesis"], 0.005)
+        self.assertEqual(metrics["hypotheses_per_second"], 500.0)
+        self.assertEqual(metrics["box_volume_evaluations_per_second"], 82000.0)
+        self.assertIn("5 batches of 100", metrics["measurement_scope"])
+        self.assertIn("same code, runner, and protocol", metrics["comparability"])
+        # The deterministic core report remains free of timing fields.
         self.assertNotIn("performance", lab.run())
 
 
