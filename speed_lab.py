@@ -19,6 +19,7 @@ import time
 MAX_TOTAL_SAMPLES = 2_000_000
 MAX_REPLICATES = 1_000
 MAX_SAMPLES_PER_METHOD = 100_000
+BOOTSTRAP_RESAMPLES = 2_000
 ANTITHETIC_VARIANCE_INTERVALS = 16_384
 
 
@@ -88,6 +89,73 @@ def antithetic_unit_variance_midpoint(intervals=ANTITHETIC_VARIANCE_INTERVALS):
     return 16.0 / 3.0 + 8.0 * integral - math.pi ** 2
 
 
+def _percentile_interval(values, quantile):
+    """Return a linearly interpolated percentile from a nonempty numeric sequence."""
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    fraction = position - lower
+    estimate = ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+    return estimate
+
+
+def _bootstrap_uncertainty(errors, durations, seed, resamples=BOOTSTRAP_RESAMPLES):
+    """Estimate within-method replicate uncertainty with a paired percentile bootstrap.
+
+    Error and duration are resampled together so their within-replication
+    relationship is retained. Intervals describe variation across this run's
+    independent replications; they do not measure cross-machine uncertainty.
+    """
+    if len(errors) != len(durations) or len(errors) < 2:
+        raise ValueError("errors and durations must have the same length of at least two")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("bootstrap seed must be an integer")
+    if (isinstance(resamples, bool) or not isinstance(resamples, int)
+            or not 100 <= resamples <= 10_000):
+        raise ValueError("bootstrap resamples must be an integer between 100 and 10,000")
+    if any(not math.isfinite(value) for value in errors):
+        raise ValueError("bootstrap errors must be finite")
+    if any(not math.isfinite(value) or value <= 0 for value in durations):
+        raise ValueError("bootstrap durations must be finite and positive")
+
+    rng = random.Random(seed)
+    count = len(errors)
+    rmse_values = []
+    error_time_values = []
+    for _ in range(resamples):
+        indices = [rng.randrange(count) for _ in range(count)]
+        mean_squared_error = math.fsum(errors[index] ** 2 for index in indices) / count
+        median_seconds = statistics.median(durations[index] for index in indices)
+        rmse_values.append(math.sqrt(mean_squared_error))
+        error_time_values.append(mean_squared_error * median_seconds)
+
+    lower_quantile = (1.0 - 0.95) / 2.0
+    upper_quantile = 1.0 - lower_quantile
+    return {
+        "method": "paired_within_method_percentile_bootstrap",
+        "confidence_level": 0.95,
+        "resamples": resamples,
+        "replications": count,
+        "rmse": {
+            "lower": _percentile_interval(rmse_values, lower_quantile),
+            "upper": _percentile_interval(rmse_values, upper_quantile),
+        },
+        "rmse_squared_median_seconds": {
+            "lower": _percentile_interval(error_time_values, lower_quantile),
+            "upper": _percentile_interval(error_time_values, upper_quantile),
+        },
+        "replicate_count_warning": (
+            "Fewer than 30 replications; percentile intervals are exploratory."
+            if count < 30 else None
+        ),
+        "scope": (
+            "Within-method replicate uncertainty only; does not include "
+            "cross-machine, processor-quota, energy, or cost variation."
+        ),
+    }
+
+
 def benchmark(samples=10_000, replicates=24, seed=2026):
     """Return reproducible accuracy metrics and measured local timings.
 
@@ -144,10 +212,15 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         # All replications average independent sampling units. The antithetic
         # unit is a correlated pair, whose variance is integrated numerically.
         unit_variance = unit_variances[name]
+        method_index = tuple(METHODS).index(name)
+        bootstrap_uncertainty = _bootstrap_uncertainty(
+            errors, durations, seed ^ (0xB0075 + 104729 * method_index)
+        )
         rmse = math.sqrt(statistics.mean(error * error for error in errors))
         median_time = statistics.median(durations)
         results[name] = {
             "rmse": rmse,
+            "bootstrap_uncertainty": bootstrap_uncertainty,
             "mean_absolute_error": statistics.mean(abs(error) for error in errors),
             "average_estimate": statistics.mean(estimates),
             "median_seconds_per_replication": median_time,
@@ -204,7 +277,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "replications": replicates,
         "seed": seed,
         "execution_order_by_replication": execution_order,
-        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim.",
+        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration; these intervals do not capture cross-machine uncertainty.",
         "results": results,
     }
 
@@ -360,6 +433,10 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         errors = trial_data[name]["errors"]
         durations = trial_data[name]["durations"]
         unit_variance = unit_variances[name]
+        bootstrap_uncertainty = _bootstrap_uncertainty(
+            errors, durations,
+            seed ^ (0xB0075 + 104729 * method_indices[name])
+        )
         median_observed = statistics.median(durations)
         rmse = math.sqrt(statistics.mean(error * error for error in errors))
         theoretical_se = math.sqrt(unit_variance / samples)
@@ -379,6 +456,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
                 if median_observed > 0 else None
             ),
             "rmse": rmse,
+            "bootstrap_uncertainty": bootstrap_uncertainty,
             "theoretical_standard_error": theoretical_se,
             "standard_error_basis": (
                 "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
@@ -447,7 +525,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "observed RMSE is seed-specific. Matched-time reports include observed RMSE^2*time "
             "and model-based SE^2*time efficiency ratios versus the hit-or-miss baseline. "
             "Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. "
-            "No quantum, hardware-independent, or universal speed claim."
+            "Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration; these intervals do not capture cross-machine uncertainty. No quantum, hardware-independent, or universal speed claim."
         ),
         "target_seconds_per_replication": budget_seconds,
         "replications": replicates,
