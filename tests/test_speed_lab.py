@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from speed_lab import (
+    BOOTSTRAP_RESAMPLES,
     MAX_REPLICATES,
     MAX_TOTAL_SAMPLES,
     METHODS,
@@ -109,7 +110,7 @@ class SpeedLabTests(unittest.TestCase):
             self.assertGreaterEqual(metrics["median_seconds_per_replication"], 0)
             self.assertGreater(metrics["rmse_improvement_factor_vs_baseline"], 0)
             uncertainty = metrics["bootstrap_uncertainty"]
-            self.assertEqual(uncertainty["resamples"], BOOTSTRAP_RESAMPLES if "BOOTSTRAP_RESAMPLES" in globals() else 2000)
+            self.assertEqual(uncertainty["resamples"], BOOTSTRAP_RESAMPLES)
             self.assertEqual(uncertainty["replications"], 3)
             self.assertLessEqual(uncertainty["rmse"]["lower"], uncertainty["rmse"]["upper"])
 
