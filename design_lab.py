@@ -158,7 +158,12 @@ def run(seed=SEED):
         "novelty_status": "not_assessed",
         "novelty_scope": "The geometry and optimization are known textbook examples; no patent search or novelty claim for any new implementation.",
         "physical_validation": False,
-        "uncertainty": "Only three fixed holdout sheet sizes; no manufacturing tolerances, materials, folds, costs, or independent physical replication modeledef run_measured(seed=SEED):
+        "uncertainty": "Only three fixed holdout sheet sizes; no manufacturing tolerances, materials, folds, costs, or independent physical replication modeled.",
+        "safety_scope": "Noncritical mathematical geometry demonstration only.",
+    }
+
+
+def run_measured(seed=SEED):
     """Measure repeated in-process runs; keep timing out of the deterministic core report."""
     for _ in range(BENCHMARK_WARMUP_REPETITIONS):
         run(seed)
@@ -183,6 +188,7 @@ def run(seed=SEED):
         "repetitions_per_batch": BENCHMARK_REPETITIONS_PER_BATCH,
         "warmup_repetitions": BENCHMARK_WARMUP_REPETITIONS,
         "measured_repetitions": BENCHMARK_BATCHES * BENCHMARK_REPETITIONS_PER_BATCH,
+        "hypotheses_evaluated": hypotheses,
         "elapsed_seconds": round(sum(seconds_per_run) * BENCHMARK_REPETITIONS_PER_BATCH, 6),
         "median_seconds_per_run": round(median_seconds_per_run, 6),
         "seconds_per_hypothesis": (
@@ -214,9 +220,6 @@ def run(seed=SEED):
             "Diagnostic only; CPU model/quota, system load, runner image, and energy "
             "are not normalized. Compare only with the same code, runner, and protocol."
         ),
-    }
-    return report
-Local diagnostic only; hardware and system load are not normalized.",
     }
     return report
 
