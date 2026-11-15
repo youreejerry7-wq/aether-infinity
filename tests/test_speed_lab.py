@@ -461,6 +461,10 @@ class SpeedLabTests(unittest.TestCase):
                 # Keep this test focused on the order and timing boundaries.
                 values.reverse()
 
+            def randrange(self, stop):
+                # Deterministic bootstrap index for the mocked random generator.
+                return 0
+
         def stub_method(samples, rng):
             events.append("method")
             return math.pi
