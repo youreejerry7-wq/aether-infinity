@@ -11,6 +11,8 @@ import json
 import math
 import random
 import statistics
+import os
+import platform
 import time
 from numbers import Real
 
@@ -327,6 +329,16 @@ def run_measured(seed=SEED):
         median_seconds_per_run / hypotheses if hypotheses > 0 else None
     )
     report["performance"] = {
+        "runtime_environment": {
+            "python_implementation": platform.python_implementation(),
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor() or None,
+            "logical_cpu_count": os.cpu_count(),
+            "cpu_quota_measured": False,
+            "energy_measured": False,
+        },
         "benchmark_batches": BENCHMARK_BATCHES,
         "repetitions_per_batch": BENCHMARK_REPETITIONS_PER_BATCH,
         "warmup_repetitions": BENCHMARK_WARMUP_REPETITIONS,
