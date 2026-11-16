@@ -357,12 +357,32 @@ def run_measured(seed=SEED):
 
 
 def run_complete_report(seed=SEED):
-    """Combine the timed training search with a separately seeded holdout report."""
+    """Combine the timed training search with a separately seeded holdout report.
+
+    Record both the holdout-stage duration and complete report wall time. The
+    per-run benchmark above excludes the distributional holdout; these fields
+    make that additional verification cost visible.
+    """
+    complete_started = time.perf_counter()
     report = run_measured(seed)
+    holdout_started = time.perf_counter()
     report["distributional_holdout"] = distributional_holdout_report(
         candidate_cut=report["candidate"]["cut_cm"],
         negative_control_cut=report["negative_control"]["cut_cm"],
         seed=seed + 1,
+    )
+    holdout_elapsed = time.perf_counter() - holdout_started
+    performance = report.setdefault("performance", {})
+    performance["distributional_holdout_elapsed_seconds"] = round(
+        holdout_elapsed, 6
+    )
+    performance["complete_report_elapsed_seconds"] = round(
+        time.perf_counter() - complete_started, 6
+    )
+    performance["complete_report_measurement_scope"] = (
+        "Wall time for run_complete_report(), including run_measured() warmups, "
+        "500 timed run() repetitions, the final deterministic run(), and one "
+        "distributional holdout; excludes interpreter startup and JSON serialization."
     )
     return report
 
