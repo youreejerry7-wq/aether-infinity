@@ -335,6 +335,38 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertIs(report["distributional_holdout"], holdout)
 
 
+    def test_complete_report_records_holdout_and_end_to_end_latency(self):
+        from unittest.mock import patch
+
+        sample = {
+            "candidate": {"cut_cm": 4.0},
+            "negative_control": {"cut_cm": 7.5},
+            "performance": {},
+        }
+        holdout = {"box_volume_evaluations": 600}
+        with patch.object(lab, "run_measured", return_value=sample):
+            with patch.object(
+                lab, "distributional_holdout_report", return_value=holdout
+            ):
+                with patch.object(
+                    lab.time, "perf_counter",
+                    side_effect=(10.0, 10.25, 10.8, 11.0),
+                ):
+                    report = lab.run_complete_report(seed=2026)
+
+        self.assertEqual(
+            report["performance"]["distributional_holdout_elapsed_seconds"],
+            0.55,
+        )
+        self.assertEqual(
+            report["performance"]["complete_report_elapsed_seconds"],
+            1.0,
+        )
+        self.assertIn(
+            "500 timed run() repetitions",
+            report["performance"]["complete_report_measurement_scope"],
+        )
+
     def test_distributional_holdout_normal_interval_threshold_boundary(self):
         below = lab.distributional_holdout_report(
             4.0, 7.5, seed=20261105, case_count=29
