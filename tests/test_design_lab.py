@@ -1,6 +1,7 @@
 """Offline controls for the bounded geometry candidate search."""
 import json
 import math
+import platform
 import unittest
 
 import design_lab as lab
@@ -221,6 +222,15 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(metrics["box_volume_evaluations_per_second"], 82000.0)
         self.assertIn("5 batches of 100", metrics["measurement_scope"])
         self.assertIn("same code, runner, and protocol", metrics["comparability"])
+        environment = metrics["runtime_environment"]
+        self.assertEqual(environment["python_implementation"], platform.python_implementation())
+        self.assertEqual(environment["python_version"], platform.python_version())
+        self.assertEqual(environment["machine"], platform.machine())
+        self.assertIn("platform", environment)
+        self.assertIn("processor", environment)
+        self.assertIn("logical_cpu_count", environment)
+        self.assertIs(environment["cpu_quota_measured"], False)
+        self.assertIs(environment["energy_measured"], False)
         # The deterministic core report remains free of timing fields.
         self.assertNotIn("performance", lab.run())
 
