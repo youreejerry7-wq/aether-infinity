@@ -242,6 +242,29 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertAlmostEqual(rejected["mean_improvement_cm3"], -258.650827, places=6)
         self.assertEqual(rejected["evidence_level"], "negative_control")
         self.assertEqual(rejected["control_result"], "rejected")
+        for summary in (selected, rejected):
+            self.assertEqual(
+                summary["mean_uncertainty_method"],
+                "normal_approximation_1.96_se",
+            )
+            self.assertGreater(summary["sample_standard_deviation_cm3"], 0)
+            self.assertGreater(summary["standard_error_of_mean_cm3"], 0)
+            lower, upper = summary["mean_95pct_normal_interval_cm3"]
+            self.assertLess(lower, summary["mean_improvement_cm3"])
+            self.assertGreater(upper, summary["mean_improvement_cm3"])
+            self.assertAlmostEqual(
+                (upper - lower) / 2,
+                1.96 * summary["standard_error_of_mean_cm3"],
+                delta=0.000002,
+            )
+        self.assertIn("Monte Carlo sampling uncertainty", candidate["uncertainty_scope"])
+
+        single_case = lab.distributional_holdout_report(4.0, 7.5, case_count=1)
+        for summary in (single_case["candidate"], single_case["negative_control"]):
+            self.assertIsNone(summary["sample_standard_deviation_cm3"])
+            self.assertIsNone(summary["standard_error_of_mean_cm3"])
+            self.assertIsNone(summary["mean_95pct_normal_interval_cm3"])
+
         self.assertEqual(candidate["novelty_status"], "not_assessed")
         self.assertFalse(candidate["physical_validation"])
         self.assertIn("not a statistical population guarantee", candidate["interpretation"])
