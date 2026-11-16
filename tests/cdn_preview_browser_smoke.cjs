@@ -89,7 +89,7 @@ async function main() {
       0
     );
 
-    assert.match(summary || "", /Latest archived cycle:/);
+    assert.match(summary || "", /(Latest archived cycle:|archived cycles · latest:)/);
     assert.equal(status, "Latest archive record loaded");
     assert.ok(renderedRows > 0, "the public archive should render at least one experiment row");
     assert.ok(externalRequests.length <= 2, "the initial view should make at most two archive requests");
