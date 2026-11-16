@@ -12,6 +12,7 @@ import math
 import random
 import statistics
 import time
+from numbers import Real
 
 SEED = 20261102
 TRAIN_CASES = 8
@@ -39,9 +40,19 @@ PRIOR_ART = (
 )
 
 
+def _is_finite_real(value):
+    """Accept finite real dimensions/cuts, but reject bool and non-numeric inputs."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        return False
+    try:
+        return math.isfinite(value)
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 def box_volume(width, height, cut):
     """Model volume in cm^3; invalid geometry has zero usable volume."""
-    if not all(math.isfinite(value) for value in (width, height, cut)):
+    if not all(_is_finite_real(value) for value in (width, height, cut)): 
         return 0.0
     if width <= 0 or height <= 0 or not 0 < cut < min(width, height) / 2:
         return 0.0
@@ -70,7 +81,7 @@ def continuous_training_optimum(sheets):
     interval. This is an oracle for this known geometry, not an invention.
     """
     if not sheets or any(
-        not (math.isfinite(w) and math.isfinite(h) and w > 0 and h > 0)
+        not (_is_finite_real(w) and _is_finite_real(h) and w > 0 and h > 0)
         for w, h in sheets
     ):
         raise ValueError("Expected nonempty finite positive sheet dimensions")
@@ -87,10 +98,10 @@ def evaluate(cut, holdout=HOLDOUT_SHEETS):
     """Holdout check versus a predeclared baseline; no training score used."""
     # Reject invalid test fixtures rather than silently scoring zero-volume
     # geometry as a meaningful failure or success.
-    if not holdout or not math.isfinite(cut) or cut <= 0:
+    if not holdout or not _is_finite_real(cut) or cut <= 0:
         raise ValueError("Expected nonempty holdout and finite positive cut")
     for width, height in holdout:
-        if not all(math.isfinite(v) for v in (width, height)):
+        if not all(_is_finite_real(v) for v in (width, height)):
             raise ValueError("Holdout dimensions must be finite")
         if not 0 < BASELINE_CUT < min(width, height) / 2 or not 0 < cut < min(width, height) / 2:
             raise ValueError("Both baseline and candidate cuts must be feasible")
@@ -192,7 +203,7 @@ def distributional_holdout_report(
     width_range = (18.0, 22.0)
     height_range = (28.0, 32.0)
     for cut in (BASELINE_CUT, candidate_cut, negative_control_cut):
-        if not math.isfinite(cut) or cut <= 0 or cut >= min(width_range[0], height_range[0]) / 2:
+        if not _is_finite_real(cut) or cut <= 0 or cut >= min(width_range[0], height_range[0]) / 2:
             raise ValueError("All cuts must be finite, positive, and feasible across the holdout range")
 
     rng = random.Random(seed)
