@@ -153,7 +153,11 @@ def run(seed=SEED):
         "baseline_training_mean_volume_cm3": scores[BASELINE_CUT],
         "holdout_sheets_cm": [list(pair) for pair in HOLDOUT_SHEETS],
         "candidate": {**candidate, "evidence_level": "simulation_candidate" if candidate["passed_all_holdouts"] else "rejected_simulation_candidate"},
-        "negative_control": {**negative, "evidence_level": "rejected_simulation_candidate" if not negative["passed_all_holdouts"] else "simulation_candidate"},
+        "negative_control": {
+            **negative,
+            "evidence_level": "negative_control",
+            "control_result": "rejected" if not negative["passed_all_holdouts"] else "not_rejected",
+        },
         "prior_art_evidence": [dict(item) for item in PRIOR_ART],
         "model_prior_art_status": "established_textbook_example",
         "novelty_status": "not_assessed",
@@ -234,12 +238,21 @@ def distributional_holdout_report(
         "candidate": {
             **candidate_summary,
             "passed_all_sampled_cases": candidate_summary["positive_cases"] == case_count,
-            "evidence_level": "simulation_candidate",
+            "evidence_level": (
+                "simulation_candidate"
+                if candidate_summary["positive_cases"] == case_count
+                else "rejected_simulation_candidate"
+            ),
         },
         "negative_control": {
             **negative_summary,
             "rejected_on_all_sampled_cases": negative_summary["positive_cases"] == 0,
-            "evidence_level": "rejected_simulation_candidate",
+            "evidence_level": "negative_control",
+            "control_result": (
+                "rejected"
+                if negative_summary["positive_cases"] < case_count
+                else "not_rejected"
+            ),
         },
         "interpretation": (
             "Finite synthetic robustness sample over the declared ranges only; "

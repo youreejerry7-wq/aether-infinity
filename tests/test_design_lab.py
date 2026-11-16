@@ -49,7 +49,8 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertTrue(all(v > 0 for v in report["negative_control"]["holdout_volumes_cm3"]))
         self.assertFalse(report["negative_control"]["passed_all_holdouts"])
         self.assertLess(report["negative_control"]["minimum_holdout_improvement_cm3"], 0)
-        self.assertEqual(report["negative_control"]["evidence_level"], "rejected_simulation_candidate")
+        self.assertEqual(report["negative_control"]["evidence_level"], "negative_control")
+        self.assertEqual(report["negative_control"]["control_result"], "rejected")
 
     def test_holdout_not_used_to_select_candidate(self):
         # Actually substitute the holdout used by run(), not merely call
@@ -239,10 +240,30 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(rejected["positive_cases"], 0)
         self.assertTrue(rejected["rejected_on_all_sampled_cases"])
         self.assertAlmostEqual(rejected["mean_improvement_cm3"], -258.650827, places=6)
-        self.assertEqual(rejected["evidence_level"], "rejected_simulation_candidate")
+        self.assertEqual(rejected["evidence_level"], "negative_control")
+        self.assertEqual(rejected["control_result"], "rejected")
         self.assertEqual(candidate["novelty_status"], "not_assessed")
         self.assertFalse(candidate["physical_validation"])
         self.assertIn("not a statistical population guarantee", candidate["interpretation"])
+
+    def test_distributional_holdout_labels_failed_candidate_and_unrejected_control(self):
+        report = lab.distributional_holdout_report(
+            candidate_cut=7.5,
+            negative_control_cut=4.0,
+            seed=20261103,
+            case_count=100,
+        )
+
+        candidate = report["candidate"]
+        self.assertFalse(candidate["passed_all_sampled_cases"])
+        self.assertEqual(candidate["positive_cases"], 0)
+        self.assertEqual(candidate["evidence_level"], "rejected_simulation_candidate")
+
+        control = report["negative_control"]
+        self.assertEqual(control["positive_cases"], 100)
+        self.assertFalse(control["rejected_on_all_sampled_cases"])
+        self.assertEqual(control["evidence_level"], "negative_control")
+        self.assertEqual(control["control_result"], "not_rejected")
 
     def test_distributional_holdout_rejects_invalid_budgets_and_infeasible_cuts(self):
         invalid = (
