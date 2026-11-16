@@ -335,5 +335,36 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertIs(report["distributional_holdout"], holdout)
 
 
+    def test_distributional_holdout_normal_interval_threshold_boundary(self):
+        below = lab.distributional_holdout_report(
+            4.0, 7.5, seed=20261105, case_count=29
+        )
+        at_threshold = lab.distributional_holdout_report(
+            4.0, 7.5, seed=20261105, case_count=30
+        )
+
+        for report in (below, at_threshold):
+            for summary in (report["candidate"], report["negative_control"]):
+                self.assertGreater(summary["sample_standard_deviation_cm3"], 0)
+                self.assertGreater(summary["standard_error_of_mean_cm3"], 0)
+
+        for summary in (below["candidate"], below["negative_control"]):
+            self.assertIsNone(summary["mean_95pct_normal_interval_cm3"])
+            self.assertEqual(
+                summary["mean_uncertainty_method"],
+                "standard_error_only_fewer_than_30_cases",
+            )
+
+        for summary in (at_threshold["candidate"], at_threshold["negative_control"]):
+            interval = summary["mean_95pct_normal_interval_cm3"]
+            self.assertIsNotNone(interval)
+            self.assertEqual(
+                summary["mean_uncertainty_method"],
+                "normal_approximation_1.96_se",
+            )
+            self.assertLess(interval[0], summary["mean_improvement_cm3"])
+            self.assertGreater(interval[1], summary["mean_improvement_cm3"])
+
+
 if __name__ == "__main__":
     unittest.main()
