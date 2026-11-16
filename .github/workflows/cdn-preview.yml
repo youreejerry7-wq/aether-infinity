@@ -206,7 +206,7 @@ jobs:
     # Measure the actual rendered page and its public data requests in Chromium.
     # This targets the isolated preview only; it must never call the Flask API.
     needs: [preview, static-site-smoke]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
