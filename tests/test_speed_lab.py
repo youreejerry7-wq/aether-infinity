@@ -55,8 +55,10 @@ class SpeedLabTests(unittest.TestCase):
 
     def test_validation(self):
         for method in METHODS.values():
-            with self.assertRaises(ValueError):
-                method(0, random.Random(7))
+            for invalid_samples in (0, -1, True, 1.5, "2", None):
+                with self.subTest(method=method.__name__, samples=invalid_samples):
+                    with self.assertRaises(ValueError):
+                        method(invalid_samples, random.Random(7))
         for kwargs in (
             {"samples": 0},
             {"replicates": 1},
