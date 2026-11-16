@@ -259,11 +259,21 @@ class BoxDesignLabTests(unittest.TestCase):
             )
         self.assertIn("Monte Carlo sampling uncertainty", candidate["uncertainty_scope"])
 
+        small_sample = lab.distributional_holdout_report(4.0, 7.5, case_count=10)
+        for summary in (small_sample["candidate"], small_sample["negative_control"]):
+            self.assertGreater(summary["standard_error_of_mean_cm3"], 0)
+            self.assertIsNone(summary["mean_95pct_normal_interval_cm3"])
+            self.assertEqual(
+                summary["mean_uncertainty_method"],
+                "standard_error_only_fewer_than_30_cases",
+            )
+
         single_case = lab.distributional_holdout_report(4.0, 7.5, case_count=1)
         for summary in (single_case["candidate"], single_case["negative_control"]):
             self.assertIsNone(summary["sample_standard_deviation_cm3"])
             self.assertIsNone(summary["standard_error_of_mean_cm3"])
             self.assertIsNone(summary["mean_95pct_normal_interval_cm3"])
+            self.assertEqual(summary["mean_uncertainty_method"], "not_estimable_single_case")
 
         self.assertEqual(candidate["novelty_status"], "not_assessed")
         self.assertFalse(candidate["physical_validation"])
