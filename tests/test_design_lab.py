@@ -17,6 +17,9 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(lab.box_volume(20, float("inf"), 2), 0)
         self.assertEqual(lab.box_volume(20, 30, float("nan")), 0)
         self.assertEqual(lab.box_volume(20, 30, float("-inf")), 0)
+        self.assertEqual(lab.box_volume(True, 30, 2), 0)
+        self.assertEqual(lab.box_volume(20, 30, True), 0)
+        self.assertEqual(lab.box_volume("20", 30, 2), 0)
 
     def test_training_seed_reproducible_and_bounded(self):
         a = lab.training_sheets(42)
@@ -117,10 +120,21 @@ class BoxDesignLabTests(unittest.TestCase):
 
     def test_analytic_reference_rejects_invalid_dimensions(self):
         for sheets in ((), ((0, 30),), ((float("nan"), 30),),
-                       ((20, float("inf")),)):
+                       ((20, float("inf")),), ((True, 30),), (("20", 30),)):
             with self.subTest(sheets=sheets):
                 with self.assertRaises(ValueError):
                     lab.continuous_training_optimum(sheets)
+
+    def test_evaluate_rejects_boolean_and_non_numeric_geometry(self):
+        for cut, holdout in (
+            (True, lab.HOLDOUT_SHEETS),
+            ("2", lab.HOLDOUT_SHEETS),
+            (2.0, ((True, 30.0),)),
+            (2.0, (("20", 30.0),)),
+        ):
+            with self.subTest(cut=cut, holdout=holdout):
+                with self.assertRaises(ValueError):
+                    lab.evaluate(cut, holdout=holdout)
 
     def test_openstax_textbook_reference(self):
         # Independent published 24 x 36 example: x = 10 - 2*sqrt(7).
@@ -307,6 +321,9 @@ class BoxDesignLabTests(unittest.TestCase):
             (9.0, 7.5, 200),
             (float("nan"), 7.5, 200),
             (4.0, 9.0, 200),
+            (True, 7.5, 200),
+            (4.0, True, 200),
+            ("4", 7.5, 200),
         )
         for candidate, negative, count in invalid:
             with self.subTest(candidate=candidate, negative=negative, count=count):
