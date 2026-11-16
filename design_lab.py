@@ -217,13 +217,18 @@ def distributional_holdout_report(
             sample_stddev / math.sqrt(len(ordered))
             if sample_stddev is not None else None
         )
-        interval = (
-            [
+        if standard_error is None:
+            interval = None
+            uncertainty_method = "not_estimable_single_case"
+        elif len(ordered) < 30:
+            interval = None
+            uncertainty_method = "standard_error_only_fewer_than_30_cases"
+        else:
+            interval = [
                 round(mean - 1.96 * standard_error, 6),
                 round(mean + 1.96 * standard_error, 6),
             ]
-            if standard_error is not None else None
-        )
+            uncertainty_method = "normal_approximation_1.96_se"
         p05_index = max(0, math.ceil(0.05 * len(ordered)) - 1)
         positive_count = sum(value > 0 for value in ordered)
         return {
@@ -235,7 +240,7 @@ def distributional_holdout_report(
                 round(standard_error, 6) if standard_error is not None else None
             ),
             "mean_95pct_normal_interval_cm3": interval,
-            "mean_uncertainty_method": "normal_approximation_1.96_se",
+            "mean_uncertainty_method": uncertainty_method,
             "median_improvement_cm3": round(statistics.median(ordered), 6),
             "minimum_improvement_cm3": round(ordered[0], 6),
             "fifth_percentile_nearest_rank_cm3": round(ordered[p05_index], 6),
