@@ -211,10 +211,31 @@ def distributional_holdout_report(
 
     def summarize(values):
         ordered = sorted(values)
+        mean = statistics.fmean(ordered)
+        sample_stddev = statistics.stdev(ordered) if len(ordered) > 1 else None
+        standard_error = (
+            sample_stddev / math.sqrt(len(ordered))
+            if sample_stddev is not None else None
+        )
+        interval = (
+            [
+                round(mean - 1.96 * standard_error, 6),
+                round(mean + 1.96 * standard_error, 6),
+            ]
+            if standard_error is not None else None
+        )
         p05_index = max(0, math.ceil(0.05 * len(ordered)) - 1)
         positive_count = sum(value > 0 for value in ordered)
         return {
-            "mean_improvement_cm3": round(statistics.fmean(ordered), 6),
+            "mean_improvement_cm3": round(mean, 6),
+            "sample_standard_deviation_cm3": (
+                round(sample_stddev, 6) if sample_stddev is not None else None
+            ),
+            "standard_error_of_mean_cm3": (
+                round(standard_error, 6) if standard_error is not None else None
+            ),
+            "mean_95pct_normal_interval_cm3": interval,
+            "mean_uncertainty_method": "normal_approximation_1.96_se",
             "median_improvement_cm3": round(statistics.median(ordered), 6),
             "minimum_improvement_cm3": round(ordered[0], 6),
             "fifth_percentile_nearest_rank_cm3": round(ordered[p05_index], 6),
@@ -257,6 +278,12 @@ def distributional_holdout_report(
         "interpretation": (
             "Finite synthetic robustness sample over the declared ranges only; "
             "not a statistical population guarantee, patent search, or physical validation."
+        ),
+        "uncertainty_scope": (
+            "Approximate normal intervals quantify Monte Carlo sampling uncertainty "
+            "under the declared independent uniform width/height draws only; they "
+            "exclude model error, manufacturing tolerances, material variation, and "
+            "physical uncertainty."
         ),
         "novelty_status": "not_assessed",
         "physical_validation": False,
