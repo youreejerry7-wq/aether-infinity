@@ -53,11 +53,7 @@ async function main() {
       return {
         domContentLoadedMs: Math.round(navigationEntry?.domContentLoadedEventEnd || 0),
         loadEventMs: Math.round(navigationEntry?.loadEventEnd || 0),
-        resourceCount: resources.length,
-        resourceTimingTransferBytes: resources.reduce(
-          (total, entry) => total + (entry.transferSize || 0),
-          0
-        )
+        resourceCount: resources.length
       };
     });
     const summary = await page.locator("#summary").textContent();
@@ -84,7 +80,7 @@ async function main() {
         response.url.startsWith("https://raw.githubusercontent.com/") &&
         response.url.includes("/data/research")
     );
-    const responseBodyBytes = responseRecords.reduce(
+    const decodedResponseBodyBytes = responseRecords.reduce(
       (total, response) => total + response.bodyBytes,
       0
     );
@@ -99,7 +95,7 @@ async function main() {
       rawArchiveResponses.some((response) => response.status === 200),
       "at least one canonical public archive response must succeed"
     );
-    assert.ok(responseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
+    assert.ok(decodedResponseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
     assert.ok(dataReadyMs <= 20000, "archive data should become visible within the 20-second smoke budget");
 
     console.log(JSON.stringify({
@@ -110,7 +106,7 @@ async function main() {
       ...pageMetrics,
       externalRequestCount: externalRequests.length,
       externalRequests,
-      responseBodyBytes,
+      decodedResponseBodyBytes,
       responseStatuses: responseRecords.map(({ url, status, bodyBytes }) => ({
         url,
         status,
