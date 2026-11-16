@@ -4,6 +4,7 @@ on:
     paths:
       - 'cdn-preview/**'
       - 'tests/test_cdn_preview.cjs'
+      - 'tests/cdn_preview_browser_smoke.cjs'
       - 'tests/test_archive_diff_guard.cjs'
       - 'tests/measure_public_latency.py'
       - 'tests/test_measure_public_latency.py'
@@ -200,3 +201,29 @@ jobs:
           echo "static_home_repeat HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
           test "$code" = "200"
           grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview-repeat.html"
+
+  browser-smoke:
+    # Measure the actual rendered page and its public data requests in Chromium.
+    # This targets the isolated preview only; it must never call the Flask API.
+    needs: [preview, static-site-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Install isolated Playwright and Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/aether-browser"
+          cd "$RUNNER_TEMP/aether-browser"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --no-save playwright@1.56.1
+          npx playwright install chromium --with-deps
+      - name: Measure browser load, external requests, and response bytes
+        env:
+          PREVIEW_URL: https://aether-cdn-preview.onrender.com/
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/aether-browser/node_modules/playwright
+        run: node tests/cdn_preview_browser_smoke.cjs
