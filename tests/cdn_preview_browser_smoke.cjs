@@ -71,12 +71,14 @@ async function main() {
     const unexpectedExternal = externalRequests.filter(
       (url) => new URL(url).hostname !== "raw.githubusercontent.com"
     );
-    const flaskOrApiRequests = requestUrls.filter(
-      (url) =>
-        /aether-infinity\\.onrender\\.com/i.test(url) ||
-        /\\/api\\//i.test(new URL(url).pathname) ||
-        new URL(url).pathname === "/health"
-    );
+    const flaskOrApiRequests = requestUrls.filter((url) => {
+      const parsed = new URL(url);
+      return (
+        parsed.hostname === "aether-infinity.onrender.com" ||
+        parsed.pathname.startsWith("/api/") ||
+        parsed.pathname === "/health"
+      );
+    });
     const rawArchiveResponses = responseRecords.filter(
       (response) =>
         response.url.startsWith("https://raw.githubusercontent.com/") &&
