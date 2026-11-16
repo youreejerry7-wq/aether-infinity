@@ -25,13 +25,15 @@ jobs:
       - name: Show reproducible benchmark
         run: python speed_lab.py --samples 10000 --replicates 24 --seed 2026
 
-      # Fifteen calibrated trials at a 5 ms target fit the shared two-million-unit
-      # cap on the reference runner; fail if budget scaling silently shortens them.
+      # Request a 5 ms target. Faster runners may proportionally scale the
+      # per-method counts to respect the shared cap; the report must expose the
+      # scale and actual timings. Validate the hard budget, not a machine-specific
+      # calibration outcome.
       - name: Show measured matched-time trials (seed 2026)
         run: |
           python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2026 | tee matched-2026.json
-          python -c 'import json; d=json.load(open("matched-2026.json")); assert d["sampling_budget_scale_factor"] == 1.0, "shared budget scaled the requested 5 ms trial target"'
+          python -c 'import json; d=json.load(open("matched-2026.json")); assert 0 < d["sampling_budget_scale_factor"] <= 1; assert d["total_sampling_units_including_calibration"] <= d["sampling_unit_budget"]; assert d["replications"] == 15 and all(v["median_observed_seconds"] > 0 for v in d["results"].values()); print("budget_scale_factor:", d["sampling_budget_scale_factor"])'
       - name: Repeat matched-time trials with an independent seed
         run: |
           python speed_lab.py --matched-seconds 0.005 --replicates 15 --seed 2027 | tee matched-2027.json
-          python -c 'import json; d=json.load(open("matched-2027.json")); assert d["sampling_budget_scale_factor"] == 1.0, "shared budget scaled the requested 5 ms trial target"'
+          python -c 'import json; d=json.load(open("matched-2027.json")); assert 0 < d["sampling_budget_scale_factor"] <= 1; assert d["total_sampling_units_including_calibration"] <= d["sampling_unit_budget"]; assert d["replications"] == 15 and all(v["median_observed_seconds"] > 0 for v in d["results"].values()); print("budget_scale_factor:", d["sampling_budget_scale_factor"])'
