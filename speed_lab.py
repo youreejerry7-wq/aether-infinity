@@ -38,26 +38,29 @@ def benchmark_environment():
     }
 
 
+def _validate_sampling_units(samples):
+    """Reject non-integer and boolean counts before entering estimator loops."""
+    if isinstance(samples, bool) or not isinstance(samples, int) or samples <= 0:
+        raise ValueError("samples must be a positive integer")
+
+
 def circle_hits(samples, rng):
     """Baseline: two uniform random draws per point and an indicator."""
-    if samples <= 0:
-        raise ValueError("samples must be positive")
+    _validate_sampling_units(samples)
     hits = sum(rng.random() ** 2 + rng.random() ** 2 <= 1 for _ in range(samples))
     return 4.0 * hits / samples
 
 
 def conditional_1d(samples, rng):
     """Integrate out Y analytically: E[4 * sqrt(1 - X^2)] = pi."""
-    if samples <= 0:
-        raise ValueError("samples must be positive")
+    _validate_sampling_units(samples)
     total = sum(math.sqrt(1.0 - (x := rng.random()) * x) for _ in range(samples))
     return 4.0 * total / samples
 
 
 def antithetic_1d(samples, rng):
     """Pair X with 1-X, each marginal uniform, to reduce variance."""
-    if samples <= 0:
-        raise ValueError("samples must be positive")
+    _validate_sampling_units(samples)
     total = 0.0
     for _ in range(samples):
         x = rng.random()
