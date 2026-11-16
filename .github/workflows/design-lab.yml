@@ -65,4 +65,19 @@ jobs:
             else
               grep -qi 'VaultCore' "$output"
             fi
+
+            # Immediately repeat the same GET to distinguish first-observation
+            # latency from a warm follow-up; this is not a controlled idle test.
+            warm_output="${output}-warm"
+            warm_metrics=$(curl -sS -L --retry 2 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 12 --max-time 100 --max-filesize 2000000 \
+              -o "$warm_output" -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$url")
+            read -r warm_status warm_ttfb warm_total warm_bytes <<< "$warm_metrics"
+            echo "$service warm GET: HTTP=$warm_status ttfb_seconds=$warm_ttfb total_seconds=$warm_total bytes=$warm_bytes"
+            test "$warm_status" = 200
+            if [ "$service" = aether ]; then
+              python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$warm_output"
+            else
+              grep -qi 'VaultCore' "$warm_output"
+            fi
           done
