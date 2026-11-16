@@ -121,6 +121,109 @@ def evaluate(cut, holdout=HOLDOUT_SHEETS):
     }
 
 
+def _validate_dimension_range(bounds, name):
+    """Validate a closed positive two-value dimension range."""
+    if not isinstance(bounds, (tuple, list)) or len(bounds) != 2:
+        raise ValueError(f"{name} must contain exactly two dimensions")
+    low, high = bounds
+    if (
+        not _is_finite_real(low)
+        or not _is_finite_real(high)
+        or low <= 0
+        or high < low
+    ):
+        raise ValueError(f"{name} must be finite, positive, and ordered")
+    return low, high
+
+
+def _volume_difference(width, height, cut, baseline):
+    """Factorized V(cut)-V(baseline), bilinear in width and height."""
+    return (cut - baseline) * (
+        width * height
+        - 2 * (cut + baseline) * (width + height)
+        + 4 * (cut * cut + cut * baseline + baseline * baseline)
+    )
+
+
+def range_robustness_report(
+    candidate_cut,
+    negative_control_cut=NEGATIVE_CONTROL_CUT,
+    width_range=(18.0, 22.0),
+    height_range=(28.0, 32.0),
+):
+    """Prove model-only improvement bounds over a rectangular size range.
+
+    For fixed cuts, the difference in box volume is bilinear in width and
+    height. Its extrema over a closed rectangle therefore occur at its four
+    corners. This is an exact bound for the ideal geometry model, not a
+    statistical sample or a physical manufacturing guarantee.
+    """
+    width_low, width_high = _validate_dimension_range(width_range, "width_range")
+    height_low, height_high = _validate_dimension_range(height_range, "height_range")
+    minimum_dimension = min(width_low, height_low)
+    for name, cut in (
+        ("baseline", BASELINE_CUT),
+        ("candidate", candidate_cut),
+        ("negative control", negative_control_cut),
+    ):
+        if not _is_finite_real(cut) or not 0 < cut < minimum_dimension / 2:
+            raise ValueError(f"{name} cut must be finite, positive, and feasible across the range")
+
+    corners = (
+        (width_low, height_low),
+        (width_low, height_high),
+        (width_high, height_low),
+        (width_high, height_high),
+    )
+
+    def summarize(cut):
+        values = [_volume_difference(w, h, cut, BASELINE_CUT) for w, h in corners]
+        minimum_index = min(range(len(values)), key=values.__getitem__)
+        maximum_index = max(range(len(values)), key=values.__getitem__)
+        minimum = values[minimum_index]
+        maximum = values[maximum_index]
+        return {
+            "corner_improvements_cm3": [
+                {"width_cm": w, "height_cm": h, "improvement_cm3": value}
+                for (w, h), value in zip(corners, values)
+            ],
+            "minimum_improvement_cm3": minimum,
+            "minimum_at_cm": list(corners[minimum_index]),
+            "maximum_improvement_cm3": maximum,
+            "maximum_at_cm": list(corners[maximum_index]),
+            "passed_entire_range": minimum > 0,
+            "evidence_level": (
+                "simulation_candidate" if minimum > 0 else "rejected_simulation_candidate"
+            ),
+        }
+
+    candidate = summarize(candidate_cut)
+    negative = summarize(negative_control_cut)
+    negative["rejected_entire_range"] = negative["maximum_improvement_cm3"] <= 0
+    negative["control_result"] = (
+        "rejected" if negative["rejected_entire_range"] else "not_rejected"
+    )
+    return {
+        "method": "exact_bilinear_corner_bounds",
+        "width_range_cm": [width_low, width_high],
+        "height_range_cm": [height_low, height_high],
+        "corner_difference_evaluations": 8,
+        "candidate_cut_cm": candidate_cut,
+        "negative_control_cut_cm": negative_control_cut,
+        "baseline_cut_cm": BASELINE_CUT,
+        "mathematical_basis": (
+            "For fixed cuts, the volume difference is bilinear in width and height; "
+            "its extrema on a closed rectangle occur at the four corners."
+        ),
+        "candidate": candidate,
+        "negative_control": negative,
+        "scope": (
+            "Exact for the ideal box-volume formula over every width/height pair "
+            "in the declared closed ranges; excludes materials, fold geometry, "
+            "manufacturing tolerances, costs, and physical validation."
+        ),
+    }
+
 def run(seed=SEED):
     sheets = training_sheets(seed)
     scores = {cut: mean_volume(sheets, cut) for cut in CUT_GRID}
@@ -133,6 +236,7 @@ def run(seed=SEED):
     # without changing the training-only candidate selection.
     candidate = evaluate(selected, holdout=HOLDOUT_SHEETS)
     negative = evaluate(NEGATIVE_CONTROL_CUT, holdout=HOLDOUT_SHEETS)
+    range_robustness = range_robustness_report(selected, NEGATIVE_CONTROL_CUT)
     return {
         "problem": "Open-top folded box from rectangular sheet (synthetic geometry)",
         "formula": "V=x*(W-2*x)*(H-2*x), 0<x<min(W,H)/2",
@@ -147,10 +251,17 @@ def run(seed=SEED):
             # Two holdout reports (candidate and negative control), each scoring
             # both the selected cut and the fixed baseline on every holdout.
             "holdout_volume_evaluations": 2 * 2 * len(HOLDOUT_SHEETS),
+            "range_corner_difference_evaluations": 8,
             "total_box_volume_evaluations": (
                 len(CUT_GRID) * len(sheets)
                 + len(sheets)
                 + 2 * 2 * len(HOLDOUT_SHEETS)
+            ),
+            "total_model_evaluations": (
+                len(CUT_GRID) * len(sheets)
+                + len(sheets)
+                + 2 * 2 * len(HOLDOUT_SHEETS)
+                + 8
             ),
             "hypotheses_evaluated": 1,
         },
@@ -171,6 +282,7 @@ def run(seed=SEED):
             "evidence_level": "negative_control",
             "control_result": "rejected" if not negative["passed_all_holdouts"] else "not_rejected",
         },
+        "range_robustness": range_robustness,
         "prior_art_evidence": [dict(item) for item in PRIOR_ART],
         "model_prior_art_status": "established_textbook_example",
         "novelty_status": "not_assessed",
@@ -324,6 +436,7 @@ def run_measured(seed=SEED):
     report = run(seed)
     median_seconds_per_run = statistics.median(seconds_per_run)
     evaluations = report["workload"]["total_box_volume_evaluations"]
+    model_evaluations = report["workload"]["total_model_evaluations"]
     hypotheses = report["workload"]["hypotheses_evaluated"]
     seconds_per_hypothesis = (
         median_seconds_per_run / hypotheses if hypotheses > 0 else None
@@ -366,9 +479,13 @@ def run_measured(seed=SEED):
             round(evaluations / median_seconds_per_run, 2)
             if median_seconds_per_run > 0 else None
         ),
+        "model_evaluations_per_second": (
+            round(model_evaluations / median_seconds_per_run, 2)
+            if median_seconds_per_run > 0 else None
+        ),
         "measurement_scope": (
             "Median of 5 batches of 100 in-process run() calls; includes training, "
-            "grid scoring, analytic reference, and holdout checks; excludes interpreter "
+            "grid scoring, analytic reference, fixed holdouts, and exact range bounds; excludes interpreter "
             "startup and JSON serialization."
         ),
         "comparability": (

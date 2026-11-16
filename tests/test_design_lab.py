@@ -182,7 +182,9 @@ class BoxDesignLabTests(unittest.TestCase):
             "training_grid_evaluations": 144,
             "continuous_reference_evaluations": 8,
             "holdout_volume_evaluations": 12,
+            "range_corner_difference_evaluations": 8,
             "total_box_volume_evaluations": 164,
+            "total_model_evaluations": 172,
             "hypotheses_evaluated": 1,
         })
         self.assertEqual(report["workload"], lab.run()["workload"])
@@ -193,6 +195,7 @@ class BoxDesignLabTests(unittest.TestCase):
         sample = {
             "workload": {
                 "total_box_volume_evaluations": 164,
+                "total_model_evaluations": 172,
                 "hypotheses_evaluated": 1,
             }
         }
@@ -220,6 +223,7 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(metrics["max_seconds_per_hypothesis"], 0.005)
         self.assertEqual(metrics["hypotheses_per_second"], 500.0)
         self.assertEqual(metrics["box_volume_evaluations_per_second"], 82000.0)
+        self.assertEqual(metrics["model_evaluations_per_second"], 86000.0)
         self.assertIn("5 batches of 100", metrics["measurement_scope"])
         self.assertIn("same code, runner, and protocol", metrics["comparability"])
         environment = metrics["runtime_environment"]
@@ -423,6 +427,76 @@ class BoxDesignLabTests(unittest.TestCase):
             )
             self.assertLess(interval[0], summary["mean_improvement_cm3"])
             self.assertGreater(interval[1], summary["mean_improvement_cm3"])
+
+    def test_exact_range_bounds_match_volume_differences_and_cover_rectangle(self):
+        report = lab.range_robustness_report(4.0, 7.5)
+        self.assertEqual(report["method"], "exact_bilinear_corner_bounds")
+        self.assertEqual(report["corner_difference_evaluations"], 8)
+        self.assertAlmostEqual(report["candidate"]["minimum_improvement_cm3"], 128.0)
+        self.assertAlmostEqual(report["candidate"]["maximum_improvement_cm3"], 336.0)
+        self.assertEqual(report["candidate"]["minimum_at_cm"], [18.0, 28.0])
+        self.assertEqual(report["candidate"]["maximum_at_cm"], [22.0, 32.0])
+        self.assertTrue(report["candidate"]["passed_entire_range"])
+        self.assertEqual(report["candidate"]["evidence_level"], "simulation_candidate")
+        self.assertAlmostEqual(report["negative_control"]["minimum_improvement_cm3"], -401.5)
+        self.assertAlmostEqual(report["negative_control"]["maximum_improvement_cm3"], -115.5)
+        self.assertEqual(report["negative_control"]["minimum_at_cm"], [18.0, 32.0])
+        self.assertEqual(report["negative_control"]["maximum_at_cm"], [22.0, 32.0])
+        self.assertTrue(report["negative_control"]["rejected_entire_range"])
+        self.assertEqual(report["negative_control"]["control_result"], "rejected")
+
+        for result in (report["candidate"], report["negative_control"]):
+            for corner in result["corner_improvements_cm3"]:
+                expected = (
+                    lab.box_volume(corner["width_cm"], corner["height_cm"], 4.0 if result is report["candidate"] else 7.5)
+                    - lab.box_volume(corner["width_cm"], corner["height_cm"], lab.BASELINE_CUT)
+                )
+                self.assertAlmostEqual(corner["improvement_cm3"], expected)
+
+        # Dense deterministic interior checks independently exercise the claimed bounds.
+        for i in range(21):
+            width = 18.0 + i * 0.2
+            for j in range(21):
+                height = 28.0 + j * 0.2
+                candidate_delta = lab.box_volume(width, height, 4.0) - lab.box_volume(width, height, 2.0)
+                negative_delta = lab.box_volume(width, height, 7.5) - lab.box_volume(width, height, 2.0)
+                self.assertGreaterEqual(candidate_delta + 1e-9, report["candidate"]["minimum_improvement_cm3"])
+                self.assertLessEqual(candidate_delta - 1e-9, report["candidate"]["maximum_improvement_cm3"])
+                self.assertGreaterEqual(negative_delta + 1e-9, report["negative_control"]["minimum_improvement_cm3"])
+                self.assertLessEqual(negative_delta - 1e-9, report["negative_control"]["maximum_improvement_cm3"])
+
+    def test_run_includes_exact_range_candidate_and_rejected_control(self):
+        report = lab.run()
+        bounds = report["range_robustness"]
+        self.assertTrue(bounds["candidate"]["passed_entire_range"])
+        self.assertTrue(bounds["negative_control"]["rejected_entire_range"])
+        self.assertEqual(bounds["candidate_cut_cm"], report["candidate"]["cut_cm"])
+        self.assertEqual(bounds["negative_control_cut_cm"], report["negative_control"]["cut_cm"])
+
+    def test_range_robustness_rejects_invalid_ranges_and_cuts(self):
+        invalid_ranges = (
+            ((22.0, 18.0), (28.0, 32.0)),
+            ((0.0, 22.0), (28.0, 32.0)),
+            ((18.0, float("nan")), (28.0, 32.0)),
+            ((18.0,), (28.0, 32.0)),
+            (("18", 22.0), (28.0, 32.0)),
+            ((18.0, 22.0), (32.0, 28.0)),
+        )
+        for width_range, height_range in invalid_ranges:
+            with self.subTest(width_range=width_range, height_range=height_range):
+                with self.assertRaises(ValueError):
+                    lab.range_robustness_report(4.0, 7.5, width_range, height_range)
+
+        invalid_cuts = (
+            (True, 7.5, (18.0, 22.0), (28.0, 32.0)),
+            (4.0, float("inf"), (18.0, 22.0), (28.0, 32.0)),
+            (9.0, 7.5, (18.0, 22.0), (28.0, 32.0)),
+            (0.5, 7.5, (2.0, 22.0), (28.0, 32.0)),
+        )
+        for candidate, negative, width_range, height_range in invalid_cuts:
+            with self.subTest(candidate=candidate, negative=negative):
+                with self.assertRaises(ValueError):
+                    lab.range_robustness_report(candidate, negative, width_range, height_range)
 
 
 if __name__ == "__main__":
