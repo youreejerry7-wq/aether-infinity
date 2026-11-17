@@ -5,6 +5,7 @@ import math
 import pathlib
 import json
 import time
+from contextlib import contextmanager
 from collections import deque
 from threading import BoundedSemaphore, Lock
 from datetime import datetime, timezone
@@ -24,10 +25,19 @@ _run_times = deque()
 _run_lock = Lock()
 _run_slots = BoundedSemaphore(RUN_MAX_IN_FLIGHT)
 
+@contextmanager
 def connect():
-    c = sqlite3.connect(DB)
-    c.execute('CREATE TABLE IF NOT EXISTS experiments(id INTEGER PRIMARY KEY, created TEXT, hypothesis TEXT, trials INTEGER, estimate REAL, expected REAL, deviation REAL, status TEXT)')
-    return c
+    """Yield a transaction-scoped SQLite connection and always close it."""
+    connection = sqlite3.connect(DB)
+    try:
+        connection.execute('CREATE TABLE IF NOT EXISTS experiments(id INTEGER PRIMARY KEY, created TEXT, hypothesis TEXT, trials INTEGER, estimate REAL, expected REAL, deviation REAL, status TEXT)')
+        yield connection
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
 
 @app.get('/')
 def home():
