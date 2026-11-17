@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'data/research.json'
+      - 'data/research-latest.json'
       - 'tests/test_research_archive.py'
       - '.github/workflows/research.yml'
       - '.github/workflows/research-archive-check.yml'

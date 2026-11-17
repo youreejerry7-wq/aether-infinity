@@ -56,9 +56,27 @@ def test_repeatability_with_seed():
     res1 = run_research_cycle(seed=12345, out_path="/tmp/test_research_1.json")
     res2 = run_research_cycle(seed=12345, out_path="/tmp/test_research_2.json")
 
+    assert res1["seed"] == 12345
+    assert res2["seed"] == 12345
     assert res1["experiments"] == res2["experiments"]
     assert res1["status"] == "completed"
     assert res1["errors"] == []
+
+
+def test_unseeded_cycle_records_replayable_seed(tmp_path):
+    first = run_research_cycle(out_path=tmp_path / "first.json")
+    replay = run_research_cycle(seed=first["seed"], out_path=tmp_path / "replay.json")
+
+    assert isinstance(first["seed"], int)
+    assert 0 <= first["seed"] < 2**64
+    assert replay["seed"] == first["seed"]
+    assert replay["experiments"] == first["experiments"]
+
+
+@pytest.mark.parametrize("invalid_seed", [-1, 2**64, True, 1.5, "42"])
+def test_invalid_seed_is_rejected(tmp_path, invalid_seed):
+    with pytest.raises(ValueError, match="seed must be an unsigned 64-bit integer"):
+        run_research_cycle(seed=invalid_seed, out_path=tmp_path / "invalid.json")
 
 
 def test_run_research_cycle_file_persistence(tmp_path):

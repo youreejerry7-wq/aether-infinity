@@ -103,7 +103,12 @@ def run_research_cycle(seed=None, out_path=OUT, z_threshold=DEFAULT_Z_THRESHOLD)
     out_path = pathlib.Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    rng = random.Random(seed) if seed is not None else random.Random()
+    # Always record the actual seed so an unseeded scheduled run can be replayed.
+    if seed is None:
+        seed = random.SystemRandom().getrandbits(64)
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    rng = random.Random(seed)
 
     experiment_defs = [
         ("Fair coin frequency", lambda: bernoulli(100000, 0.5, rng=rng, z_threshold=z_threshold)),
@@ -127,6 +132,7 @@ def run_research_cycle(seed=None, out_path=OUT, z_threshold=DEFAULT_Z_THRESHOLD)
 
     record = {
         "time": now,
+        "seed": seed,
         "status": status,
         "z_threshold": z_threshold,
         "experiments": results,

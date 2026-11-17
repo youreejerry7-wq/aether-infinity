@@ -36,6 +36,12 @@ class ResearchArchiveTests(unittest.TestCase):
                 timestamp = datetime.fromisoformat(cycle["time"])
                 self.assertIsNotNone(timestamp.tzinfo)
                 self.assertIsNotNone(timestamp.utcoffset())
+                if "seed" in cycle:
+                    seed = cycle["seed"]
+                    self.assertIsInstance(seed, int)
+                    self.assertNotIsInstance(seed, bool)
+                    self.assertGreaterEqual(seed, 0)
+                    self.assertLess(seed, 2**64)
                 if previous is not None:
                     self.assertLessEqual(timestamp, previous)
                 previous = timestamp
