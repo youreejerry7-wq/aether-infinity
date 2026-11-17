@@ -21,6 +21,7 @@ MAX_REPLICATES = 1_000
 MAX_SAMPLES_PER_METHOD = 100_000
 BOOTSTRAP_RESAMPLES = 2_000
 ANTITHETIC_VARIANCE_INTERVALS = 16_384
+MAX_VARIANCE_QUADRATURE_INTERVALS = 262_144
 
 
 def benchmark_environment():
@@ -39,9 +40,11 @@ def benchmark_environment():
 
 
 def _validate_sampling_units(samples):
-    """Reject non-integer and boolean counts before entering estimator loops."""
+    """Reject invalid or over-budget counts before entering estimator loops."""
     if isinstance(samples, bool) or not isinstance(samples, int) or samples <= 0:
         raise ValueError("samples must be a positive integer")
+    if samples > MAX_TOTAL_SAMPLES:
+        raise ValueError(f"samples must not exceed {MAX_TOTAL_SAMPLES:,}")
 
 
 def circle_hits(samples, rng):
@@ -82,8 +85,11 @@ def antithetic_unit_variance_midpoint(intervals=ANTITHETIC_VARIANCE_INTERVALS):
     evaluations are correlated, so independent-function SE formulas are wrong.
     This fixed-grid quadrature is deterministic, not an exact analytic result.
     """
-    if isinstance(intervals, bool) or not isinstance(intervals, int) or intervals < 1:
-        raise ValueError("intervals must be a positive integer")
+    if (isinstance(intervals, bool) or not isinstance(intervals, int)
+            or not 1 <= intervals <= MAX_VARIANCE_QUADRATURE_INTERVALS):
+        raise ValueError(
+            f"intervals must be an integer between 1 and {MAX_VARIANCE_QUADRATURE_INTERVALS:,}"
+        )
     integral = math.fsum(
         math.sqrt((1.0 - (x := (i + 0.5) / intervals) ** 2)
                   * (1.0 - (1.0 - x) ** 2))

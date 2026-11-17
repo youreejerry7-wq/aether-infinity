@@ -3,7 +3,7 @@
 import math
 import unittest
 
-from speed_lab import antithetic_unit_variance_midpoint
+from speed_lab import MAX_VARIANCE_QUADRATURE_INTERVALS, antithetic_unit_variance_midpoint
 
 
 def independent_variance_reference(intervals=4096):
@@ -50,7 +50,7 @@ class AntitheticVarianceReferenceTests(unittest.TestCase):
                 independent_variance_reference(intervals)
 
     def test_midpoint_variance_rejects_invalid_resolution(self):
-        for intervals in (0, -1, 1.5, True):
+        for intervals in (0, -1, 1.5, True, MAX_VARIANCE_QUADRATURE_INTERVALS + 1):
             with self.subTest(intervals=intervals), self.assertRaises(ValueError):
                 antithetic_unit_variance_midpoint(intervals)
 
