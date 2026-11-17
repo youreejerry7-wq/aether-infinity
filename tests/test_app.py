@@ -50,6 +50,27 @@ def test_home_page(client):
     assert b"AETHER" in response.data
 
 
+def test_connect_context_commits_and_closes_connection(tmp_path, monkeypatch):
+    db_path = tmp_path / "connection-lifecycle.sqlite3"
+    monkeypatch.setattr(flask_app, "DB", str(db_path))
+
+    with flask_app.connect() as connection:
+        connection.execute(
+            "INSERT INTO experiments(created, hypothesis, trials, estimate, expected, deviation, status) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?)",
+            ("2026-11-17T00:00:00+00:00", "synthetic", 1, 1.0, 1.0, 0.0, "completed"),
+        )
+
+    verifier = sqlite3.connect(db_path)
+    try:
+        assert verifier.execute("SELECT COUNT(*) FROM experiments").fetchone()[0] == 1
+    finally:
+        verifier.close()
+
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connection.execute("SELECT 1")
+
+
 def test_api_results_empty_and_run(client):
     response = client.get("/api/results")
     assert response.status_code == 200
