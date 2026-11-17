@@ -104,7 +104,7 @@ jobs:
           from pathlib import Path
           archive_path, latest_path = map(Path, sys.argv[1:])
           archive = json.loads(archive_path.read_text(encoding="utf-8"))
-          latest_path.write_text(json.dumps([archive[0]], indent=2) + "\\n", encoding="utf-8")
+          latest_path.write_text(json.dumps([archive[0]], indent=2) + "\n", encoding="utf-8")
           PY
           else
             echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
