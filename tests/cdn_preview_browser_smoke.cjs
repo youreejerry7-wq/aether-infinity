@@ -51,8 +51,11 @@ async function main() {
       const navigationEntry = performance.getEntriesByType("navigation")[0];
       const resources = performance.getEntriesByType("resource");
       return {
+        navigationTtfbMs: Math.round(navigationEntry?.responseStart || 0),
         domContentLoadedMs: Math.round(navigationEntry?.domContentLoadedEventEnd || 0),
         loadEventMs: Math.round(navigationEntry?.loadEventEnd || 0),
+        navigationTransferBytes: navigationEntry?.transferSize || 0,
+        navigationDecodedBytes: navigationEntry?.decodedBodySize || 0,
         resourceCount: resources.length
       };
     });
@@ -95,8 +98,13 @@ async function main() {
       rawArchiveResponses.some((response) => response.status === 200),
       "at least one canonical public archive response must succeed"
     );
+    // Generous CI guardrails for the isolated static CDN preview, not a global SLA.
+    assert.ok(pageMetrics.navigationTtfbMs > 0 && pageMetrics.navigationTtfbMs <= 3000,
+      "static HTML TTFB should stay within the 3-second preview budget");
+    assert.ok(pageMetrics.domContentLoadedMs > 0 && pageMetrics.domContentLoadedMs <= 3000,
+      "DOMContentLoaded should stay within the 3-second preview budget");
     assert.ok(decodedResponseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
-    assert.ok(dataReadyMs <= 20000, "archive data should become visible within the 20-second smoke budget");
+    assert.ok(dataReadyMs <= 8000, "archive data should become visible within the 8-second preview budget");
 
     console.log(JSON.stringify({
       result: "PASS",
