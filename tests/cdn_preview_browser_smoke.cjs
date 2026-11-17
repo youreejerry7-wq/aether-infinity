@@ -83,6 +83,12 @@ async function main() {
         response.url.startsWith("https://raw.githubusercontent.com/") &&
         response.url.includes("/data/research")
     );
+    const compactSnapshotResponses = responseRecords.filter((response) =>
+      response.url.includes("/data/research-latest.json")
+    );
+    const compactSnapshotLoaded = compactSnapshotResponses.some(
+      (response) => response.status === 200
+    );
     const decodedResponseBodyBytes = responseRecords.reduce(
       (total, response) => total + response.bodyBytes,
       0
@@ -104,12 +110,19 @@ async function main() {
     assert.ok(pageMetrics.domContentLoadedMs > 0 && pageMetrics.domContentLoadedMs <= 3000,
       "DOMContentLoaded should stay within the 3-second preview budget");
     assert.ok(decodedResponseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
+    if (compactSnapshotLoaded) {
+      assert.equal(externalRequests.length, 1,
+        "a valid compact snapshot should require exactly one external archive request");
+      assert.ok(decodedResponseBodyBytes <= 25000,
+        "compact-snapshot initial HTML, JS, and data payload should stay below 25 KB");
+    }
     assert.ok(dataReadyMs <= 8000, "archive data should become visible within the 8-second preview budget");
 
     console.log(JSON.stringify({
       result: "PASS",
       previewUrl,
       htmlStatus: navigation.status(),
+      compactSnapshotLoaded,
       dataReadyMs,
       ...pageMetrics,
       externalRequestCount: externalRequests.length,
