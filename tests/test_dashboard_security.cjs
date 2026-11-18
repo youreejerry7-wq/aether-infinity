@@ -6,6 +6,8 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'templates/index.html'), 'utf8');
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(match, 'Expected dashboard script');
+const latestUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json';
+const archiveUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json';
 class Element {
   constructor(tag = 'div') { this.tag = tag; this.children = []; this.style = {}; this._text = ''; this.disabled = false; }
   set innerHTML(_) { throw new Error('Untrusted HTML interpolation is forbidden'); }
@@ -43,6 +45,9 @@ let results = [{
   expected: 3.14159, deviation: 0.00159, status: hostile,
 }];
 let failArchive = false;
+let failGitHub = false;
+let snapshotMissing = false;
+let snapshotArchiveOverride = null;
 let fallbackArchive = null;
 let resultsMode = 'ok';
 let resolveDelayedResults;
@@ -70,8 +75,14 @@ const fetch = async (url, options) => {
     }) };
   }
   if (url === '/api/research') return { ok: !failArchive, json: async () => fallbackArchive ?? archive };
-  if (url.startsWith('https://raw.githubusercontent.com/'))
-    return { ok: !failArchive, json: async () => archive };
+  if (url === latestUrl) {
+    if (snapshotMissing) return { ok: false, status: 404, json: async () => null };
+    return { ok: !failArchive && !failGitHub, status: failArchive || failGitHub ? 503 : 200,
+      json: async () => snapshotArchiveOverride ?? [archive[0]] };
+  }
+  if (url === archiveUrl)
+    return { ok: !failArchive && !failGitHub, status: failArchive || failGitHub ? 503 : 200,
+      json: async () => archive };
   if (url === '/api/results') {
     if (hangResultsBody) {
       hangResultsBody = false;
@@ -126,7 +137,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
   const archiveRequests = () => requests.filter(x => x.url.startsWith('https://raw.githubusercontent.com/'));
   assert.equal(archiveRequests().length, 1, 'Load GitHub archive first, not stale deployed copy');
-  assert.equal(archiveRequests()[0].url, 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json');
+  assert.equal(archiveRequests()[0].url, latestUrl, 'Load the compact latest-cycle snapshot first');
+  assert.equal(nodes['val-cycles'].textContent, 'Latest cycle only');
   assert.equal(archiveRequests()[0].options.cache, 'default', 'Allow browser caching');
   assert.equal(intervals.length, 0, 'Archive polling must not use a recurring interval');
   assert.equal(activeScheduledTimers().length, 1);
@@ -147,6 +159,18 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await settle();
   assert.equal(archiveRequests().length, 2, 'Resume when tab is visible after interval');
   assert.equal(activeScheduledTimers().length, 1, 'Visible recovery schedules exactly one next refresh');
+
+  // If the compact file has not reached main yet, use the full GitHub archive.
+  snapshotMissing = true;
+  clockMs += 300000;
+  const requestsBeforeMissingSnapshot = archiveRequests().length;
+  await context.loadAuto();
+  assert.equal(archiveRequests().length, requestsBeforeMissingSnapshot + 2);
+  assert.equal(archiveRequests().at(-2).url, latestUrl);
+  assert.equal(archiveRequests().at(-1).url, archiveUrl);
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
+  snapshotMissing = false;
+
   const status = nodes['val-status'].children[0];
   assert.equal(status.textContent, hostile, 'Untrusted status must remain inert text');
   assert.equal(nodes['auto-experiments'].children.length, 1);
@@ -235,8 +259,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   archive = [{ time: '2026-11-02T04:45:00Z', status: 'completed', errors: [], experiments: [] }];
   clockMs += 30000;
   await context.loadAuto();
-  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'),
-    'A valid archive should recover after the short retry');
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub snapshot.'),
+    'A valid compact snapshot should recover after the short retry');
 
   assert.equal(nodes.results.children[0].children[0].textContent, hostile.slice(0, 19), 'Date field stays inert even when truncated');
   assert.equal(nodes.results.children[0].children[5].textContent, hostile);
@@ -265,56 +289,49 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   await context.loadAuto();
   assert.equal(archiveRequests().length, requestsAfterFailure + 1,
     'Retry an unavailable archive after 30 seconds instead of five minutes');
-  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub snapshot.'));
 
-  // A stalled GitHub request must abort and use the bounded server snapshot fallback.
+  // A stalled compact snapshot must time out, then fall back to the full GitHub archive.
   failArchive = false;
   hangGitHub = true;
   clockMs += 300000;
   const primaryPending = context.loadAuto();
   await settle();
   const primaryTimeout = timeoutTasks.at(-1);
-  assert.equal(primaryTimeout.ms, 15000, 'GitHub archive request must be bounded');
+  assert.equal(primaryTimeout.ms, 15000, 'Compact snapshot request must be bounded');
   assert.equal(primaryTimeout.active, true);
   primaryTimeout.fn();
   await primaryPending;
   assert.equal(primaryTimeout.active, false);
-  assert.ok(nodes['auto-status'].textContent.includes('snapshot'),
-    'GitHub timeout should allow a clearly labeled server snapshot');
-  const fallbackRequest = requests.at(-1);
-  assert.equal(fallbackRequest.url, '/api/research');
-  assert.ok(fallbackRequest.options.signal, 'Fallback must also be abortable');
-  assert.equal(timeoutTasks.at(-1).active, false, 'Fallback timer must be cleared');
+  assert.equal(requests.at(-1).url, archiveUrl, 'Snapshot timeout should fall back to the full archive');
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
+  assert.equal(timeoutTasks.at(-1).active, false, 'Full-archive timeout must be cleared after success');
   const requestsAfterFallback = archiveRequests().length;
   clockMs += 30000;
   await context.loadAuto();
-  assert.equal(archiveRequests().length, requestsAfterFallback + 1,
-    'A potentially stale server snapshot triggers a 30-second GitHub retry');
-  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
+  assert.equal(archiveRequests().length, requestsAfterFallback,
+    'A successful full archive keeps the normal five-minute refresh throttle');
 
-  // If both sources hang, neither the lock nor stale data may survive the timeout.
-  hangGitHub = true;
+  // If both GitHub sources fail and the server fallback hangs, stale data is cleared.
+  failGitHub = true;
   hangFallback = true;
   clockMs += 300000;
   const bothPending = context.loadAuto();
   await settle();
-  const firstTimeout = timeoutTasks.at(-1);
-  firstTimeout.fn();
-  await settle();
-  const secondTimeout = timeoutTasks.at(-1);
-  assert.notEqual(secondTimeout, firstTimeout, 'Fallback gets its own timeout');
-  assert.equal(secondTimeout.ms, 15000);
-  secondTimeout.fn();
+  const fallbackTimeout = timeoutTasks.at(-1);
+  assert.equal(fallbackTimeout.ms, 15000, 'Server fallback must have its own timeout');
+  fallbackTimeout.fn();
   await bothPending;
-  assert.equal(secondTimeout.active, false);
+  assert.equal(fallbackTimeout.active, false);
   assert.equal(nodes['auto-summary'].style.display, 'none');
   assert.equal(nodes['auto-experiments'].children.length, 0);
   assert.ok(nodes['auto-status'].textContent.includes('unavailable'));
+  failGitHub = false;
 
-  // A subsequent scheduled refresh must recover after the stalled requests.
+  // A subsequent scheduled refresh must recover after the source failures.
   clockMs += 300000;
   await context.loadAuto();
-  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub snapshot.'));
 
   // A response with headers but a stalled JSON body must still time out and recover.
   hangArchiveBody = true;
@@ -327,8 +344,8 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   bodyTimeout.fn();
   await stalledBody;
   assert.equal(bodyTimeout.active, false, 'Body timeout must be cleared after fallback');
-  assert.equal(requests.at(-1).url, '/api/research', 'Timed-out JSON body must use server fallback');
-  assert.ok(nodes['auto-status'].textContent.includes('snapshot'));
+  assert.equal(requests.at(-1).url, archiveUrl, 'Timed-out snapshot body must use full-archive fallback');
+  assert.ok(nodes['auto-status'].textContent.includes('Latest available GitHub archive.'));
 
   // Malformed demo rows must show a safe error instead of partial rendering.
   results = [{ created: hostile, trials: 20000, estimate: 'invalid', expected: 3.14, deviation: 0, status: hostile }];
@@ -438,6 +455,7 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
     assert.ok(Array.isArray(liveArchive) && liveArchive.length > 0);
     assert.ok(Array.isArray(liveArchive[0].experiments));
     archive = liveArchive;
+    snapshotArchiveOverride = [liveArchive[0]];
     failArchive = false;
     fallbackArchive = null;
     hangGitHub = false;
