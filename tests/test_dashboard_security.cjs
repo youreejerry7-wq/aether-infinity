@@ -6,6 +6,8 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'templates/index.html'), 'utf8');
 const match = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(match, 'Expected dashboard script');
+assert.match(html, /<link rel="preconnect" href="https:\/\/raw\.githubusercontent\.com" crossorigin>/,
+  'Warm the archive origin before the first compact-snapshot request');
 const latestUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json';
 const archiveUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json';
 class Element {
