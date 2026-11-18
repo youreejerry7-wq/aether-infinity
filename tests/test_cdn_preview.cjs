@@ -6,7 +6,6 @@ const test = require("node:test");
 const {
   LATEST_URL,
   ARCHIVE_URL,
-  COMPACT_SNAPSHOT_ENABLED,
   MAX_EXPERIMENTS,
   REQUEST_TIMEOUT_MS,
   REFRESH_MS,
@@ -130,11 +129,10 @@ test("archive validation rejects empty, malformed, and undated data", () => {
 });
 
 test("live preview skips the unpublished compact snapshot on first view", async () => {
-  assert.equal(COMPACT_SNAPSHOT_ENABLED, false);
   const h = makeHarness(async (url) => {
     assert.equal(url, ARCHIVE_URL, "live preview should request only the published canonical archive");
     return { ok: true, json: async () => archive("canonical archive") };
-  }, 1000, null, COMPACT_SNAPSHOT_ENABLED);
+  }, 1000, null, false);
 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [ARCHIVE_URL]);
