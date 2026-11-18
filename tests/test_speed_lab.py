@@ -220,6 +220,19 @@ class SpeedLabTests(unittest.TestCase):
             data["calibration_wall_seconds"],
             data["calibration_estimator_seconds"],
         )
+        self.assertTrue(math.isfinite(data["end_to_end_wall_seconds"]))
+        self.assertGreater(data["end_to_end_wall_seconds"], 0)
+        self.assertAlmostEqual(
+            data["shared_setup_wall_seconds"],
+            data["variance_reference_setup"]["elapsed_seconds"]
+            + data["calibration_wall_seconds"],
+            places=9,
+        )
+        self.assertGreaterEqual(
+            data["end_to_end_wall_seconds"],
+            data["shared_setup_wall_seconds"]
+            + data["measured_trials_wall_seconds"],
+        )
         self.assertEqual(set(data["results"]), set(METHODS))
         total_units = 0
         for name, metrics in data["results"].items():
