@@ -80,7 +80,7 @@ function makeDocument() {
   };
 }
 
-function makeHarness(fetchImpl, start = 1000, storage = null, compactSnapshotEnabled = true) {
+function makeHarness(fetchImpl, start = 1000, storage = null, compactSnapshotEnabled = false) {
   const document = makeDocument();
   const calls = [];
   const timers = [];
@@ -132,7 +132,7 @@ test("live preview skips the unpublished compact snapshot on first view", async 
   const h = makeHarness(async (url) => {
     assert.equal(url, ARCHIVE_URL, "live preview should request only the published canonical archive");
     return { ok: true, json: async () => archive("canonical archive") };
-  }, 1000, null, false);
+  });
 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [ARCHIVE_URL]);
@@ -141,7 +141,7 @@ test("live preview skips the unpublished compact snapshot on first view", async 
 
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {
   const payload = archive("<img src=x onerror=alert(1)>").slice(0, 1);
-  const h = makeHarness(async () => ({ ok: true, status: 200, json: async () => payload }));
+  const h = makeHarness(async () => ({ ok: true, status: 200, json: async () => payload }), 1000, null, true);
   assert.equal(await h.controller.refresh(false), true);
 
   assert.equal(h.calls.length, 1);
@@ -168,7 +168,7 @@ test("a missing compact snapshot falls back to the full archive", async () => {
   const h = makeHarness(async (url) => {
     if (url === LATEST_URL) return { ok: false, status: 404 };
     return { ok: true, status: 200, json: async () => payload };
-  });
+  }, 1000, null, true);
 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
@@ -184,7 +184,7 @@ test("a malformed compact snapshot falls back to the canonical archive", async (
       return { ok: true, status: 200, json: async () => { throw new SyntaxError("invalid JSON"); } };
     }
     return { ok: true, status: 200, json: async () => payload };
-  }, 1000, storage);
+  }, 1000, storage, true);
 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
@@ -203,7 +203,7 @@ test("a schema-invalid compact snapshot falls back to the canonical archive", as
       };
     }
     return { ok: true, status: 200, json: async () => payload };
-  });
+  }, 1000, null, true);
 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
@@ -212,7 +212,7 @@ test("a schema-invalid compact snapshot falls back to the canonical archive", as
 
 test("a transient compact-snapshot server error does not mask or bypass the error", async () => {
   const storage = makeMemoryStorage();
-  const h = makeHarness(async () => ({ ok: false, status: 503 }), 1000, storage);
+  const h = makeHarness(async () => ({ ok: false, status: 503 }), 1000, storage, true);
 
   assert.equal(await h.controller.refresh(false), false);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
@@ -225,7 +225,7 @@ test("a missing compact snapshot is cached across page reloads", async () => {
   const first = makeHarness(async (url) => {
     if (url === LATEST_URL) return { ok: false, status: 404 };
     return { ok: true, json: async () => archive("full archive") };
-  }, 1000, storage);
+  }, 1000, storage, true);
 
   assert.equal(await first.controller.refresh(false), true);
   assert.equal(storage.values.get(SNAPSHOT_MISSING_KEY), String(1000 + SNAPSHOT_MISSING_RECHECK_MS));
@@ -233,7 +233,7 @@ test("a missing compact snapshot is cached across page reloads", async () => {
   const second = makeHarness(async (url) => {
     assert.equal(url, ARCHIVE_URL, "known-missing snapshot should be skipped");
     return { ok: true, json: async () => archive("cached fallback") };
-  }, 1000 + REFRESH_MS, storage);
+  }, 1000 + REFRESH_MS, storage, true);
 
   assert.equal(await second.controller.refresh(false), true);
   assert.deepEqual(second.calls.map((call) => call.url), [ARCHIVE_URL]);
@@ -244,7 +244,7 @@ test("manual refresh bypasses the missing-snapshot cache", async () => {
   const h = makeHarness(async (url) => {
     if (url === LATEST_URL) return { ok: false, status: 404 };
     return { ok: true, json: async () => archive("manual fallback") };
-  }, 1000, storage);
+  }, 1000, storage, true);
 
   assert.equal(await h.controller.refresh(false), true);
   assert.equal(await h.controller.refresh(true), true);
@@ -258,7 +258,7 @@ test("the missing-snapshot cache expires and retries publication checks", async 
   const h = makeHarness(async (url) => {
     if (url === LATEST_URL) return { ok: false, status: 404 };
     return { ok: true, json: async () => archive("expiry fallback") };
-  }, 1000, storage);
+  }, 1000, storage, true);
 
   assert.equal(await h.controller.refresh(false), true);
   h.advance(SNAPSHOT_MISSING_RECHECK_MS);
@@ -274,7 +274,7 @@ test("publishing the compact snapshot clears the negative cache", async () => {
   const h = makeHarness(async (url) => {
     assert.equal(url, LATEST_URL);
     return { ok: true, json: async () => archive("new compact snapshot").slice(0, 1) };
-  }, 1000, storage);
+  }, 1000, storage, true);
 
   assert.equal(await h.controller.refresh(true), true);
   assert.equal(storage.getItem(SNAPSHOT_MISSING_KEY), null);
