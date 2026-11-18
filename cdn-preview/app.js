@@ -160,9 +160,9 @@
     }
 
     async function fetchArchive(cache, signal) {
-      const options = { cache, signal };
+      const init = { cache, signal };
       if (options.compactSnapshotEnabled === true && (cache === "reload" || now() >= snapshotMissingUntil)) {
-        const latestResponse = await fetchImpl(LATEST_URL, options);
+        const latestResponse = await fetchImpl(LATEST_URL, init);
         if (latestResponse && latestResponse.ok) {
           try {
             const latestData = await latestResponse.json();
@@ -177,7 +177,7 @@
         rememberMissingSnapshot();
       }
 
-      const archiveResponse = await fetchImpl(ARCHIVE_URL, options);
+      const archiveResponse = await fetchImpl(ARCHIVE_URL, init);
       if (!archiveResponse || !archiveResponse.ok) {
         throw new Error("archive_unavailable");
       }
