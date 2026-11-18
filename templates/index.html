@@ -17,7 +17,7 @@
     .status-completed { background: #1a4d38; color: #6ee7b7; border: 1px solid #276f52; }
     .status-failed { background: #4d1a1a; color: #fca5a5; border: 1px solid #7f1d1d; }
     .badge-baseline { background: #1e293b; color: #94a3b8; border: 1px solid #475569; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
-    .badge-discovery { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+    .badge-candidate { background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
     .flag-review { background: #78350f; color: #fde68a; border: 1px solid #92400e; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
     td, th { text-align: left; border-bottom: 1px solid #28374d; padding: 10px 6px; }
@@ -50,7 +50,7 @@
         <val id="val-status">—</val>
       </div>
       <div class="info-card">
-        <label>Archived Cycles</label>
+        <label>Archive data loaded</label>
         <val id="val-cycles">—</val>
       </div>
       <div class="info-card">
@@ -109,6 +109,8 @@
 </main>
 
 <script>
+const archiveSnapshotUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json';
+const archiveFullUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json';
 const archiveRefreshMs = 300000;
 const archiveRetryMs = 30000; // Retry failed or stale-fallback loads sooner, without retry storms.
 const archiveTimeoutMs = 15000;
@@ -172,13 +174,24 @@ async function loadAuto() {
   let data = null;
   let errorSource = null;
 
-  // Prefer the up-to-date GitHub archive; the deployed Flask copy may lag behind main.
+  // Prefer the one-record GitHub snapshot; fall back to the full archive, then Flask.
   let fromGitHub = false;
+  let fromGitHubSnapshot = false;
   try {
-    data = await fetchArchiveJsonWithTimeout('https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json', { cache: 'default' });
-    fromGitHub = isUsableArchive(data);
+    data = await fetchArchiveJsonWithTimeout(archiveSnapshotUrl, { cache: 'default' });
+    fromGitHubSnapshot = isUsableArchive(data);
+    fromGitHub = fromGitHubSnapshot;
   } catch (_) {
-    // The deployed server snapshot is a read-only fallback.
+    // Try the full public archive before using the potentially stale Flask copy.
+  }
+
+  if (!fromGitHub) {
+    try {
+      data = await fetchArchiveJsonWithTimeout(archiveFullUrl, { cache: 'default' });
+      fromGitHub = isUsableArchive(data);
+    } catch (_) {
+      // Fall through to the read-only deployed server snapshot.
+    }
   }
 
   if (!fromGitHub) {
@@ -207,7 +220,9 @@ async function loadAuto() {
   }
 
   autoStatus.style.display = '';
-  autoStatus.textContent = fromGitHub ? 'Latest available GitHub archive.' : 'Showing deployed server archive snapshot (may be stale).';
+  autoStatus.textContent = fromGitHub
+    ? (fromGitHubSnapshot ? 'Latest available GitHub snapshot.' : 'Latest available GitHub archive.')
+    : 'Showing deployed server archive snapshot (may be stale).';
   // A server snapshot is useful but may be old: retry the primary source after 30s.
   if (!fromGitHub) nextArchiveRequestAt = Date.now() + archiveRetryMs;
   autoSummary.style.display = 'grid';
@@ -225,7 +240,9 @@ async function loadAuto() {
       (cycleStatus === 'failed' || cycleStatus === 'partial_failure' ? ' status-failed' : ''));
   badge.textContent = cycleStatus;
   statusNode.appendChild(badge);
-  document.getElementById('val-cycles').textContent = data.length;
+  document.getElementById('val-cycles').textContent = fromGitHubSnapshot
+    ? 'Latest cycle only'
+    : String(data.length);
   document.getElementById('val-threshold').textContent = '|z| > ' + (latest.z_threshold || 3.29);
 
   // Clear prior-cycle interpretation when the next cycle omits this field.
