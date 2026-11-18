@@ -55,4 +55,4 @@ These are point observations, not a controlled cold-start or global CDN benchmar
 
 ## Current archive fetch mode
 
-The compact `research-latest.json` endpoint is not published on `main` yet (currently HTTP 404). Until it exists, `COMPACT_SNAPSHOT_ENABLED` in `app.js` stays `false`, so a fresh page makes one request to the canonical `research.json` archive instead of paying for a guaranteed 404 before the fallback. After the compact snapshot is merged and verified on `main`, enable the flag and rerun the browser/size gates.
+The compact `research-latest.json` endpoint is not published on `main` yet (currently HTTP 404). Until it exists, the browser uses only the canonical `research.json` archive; the compact-snapshot path remains an explicit opt-in for tests and later reviewed activation. After the snapshot is published and verified on `main`, enable that path and rerun the browser/size gates.
