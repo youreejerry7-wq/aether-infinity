@@ -13,10 +13,6 @@
   const STORAGE_KEY = "aether.archive.preview.v2";
   const SNAPSHOT_MISSING_KEY = "aether.archive.preview.snapshot-missing-until.v1";
   const SNAPSHOT_MISSING_RECHECK_MS = 15 * 60 * 1000;
-  // Main does not publish research-latest.json yet; avoid a guaranteed first-view 404.
-  // Enable after the compact snapshot is merged and verified on main.
-  const COMPACT_SNAPSHOT_ENABLED = false;
-
   function isUsableArchive(data) {
     const latest = Array.isArray(data) ? data[0] : null;
     return Boolean(
@@ -37,10 +33,6 @@
     const clearTimeoutImpl = options.clearTimeoutImpl || clearTimeout;
     const AbortControllerImpl = options.AbortControllerImpl || AbortController;
     const storage = options.storage || null;
-    const compactSnapshotEnabled = options.compactSnapshotEnabled === undefined
-      ? COMPACT_SNAPSHOT_ENABLED
-      : options.compactSnapshotEnabled === true;
-
     let inFlight = false;
     let hasDisplayedArchive = false;
     let lastManualAt = -Infinity;
@@ -103,7 +95,7 @@
       if (experiments.length === 0) {
         const row = doc.createElement("tr");
         const cell = doc.createElement("td");
-        cell.textContent = "No experiment records in the latest cycle.";
+        cell.textContent = "No experiments in this cycle.";
         row.appendChild(cell);
         body.appendChild(row);
       }
@@ -169,7 +161,7 @@
 
     async function fetchArchive(cache, signal) {
       const options = { cache, signal };
-      if (compactSnapshotEnabled && (cache === "reload" || now() >= snapshotMissingUntil)) {
+      if (options.compactSnapshotEnabled === true && (cache === "reload" || now() >= snapshotMissingUntil)) {
         const latestResponse = await fetchImpl(LATEST_URL, options);
         if (latestResponse && latestResponse.ok) {
           try {
@@ -274,7 +266,6 @@
     STORAGE_KEY,
     SNAPSHOT_MISSING_KEY,
     SNAPSHOT_MISSING_RECHECK_MS,
-    COMPACT_SNAPSHOT_ENABLED,
     isUsableArchive,
     createController
   };
