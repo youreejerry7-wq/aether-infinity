@@ -52,3 +52,7 @@ Two GitHub-hosted runner observations on 2026-11-13 returned HTTP 200:
 - Immediate repeat HTML: **49–65 ms**, 3,042 bytes
 
 These are point observations, not a controlled cold-start or global CDN benchmark. The archive remains a public GitHub Raw dependency. The Flask service and production domain remain unchanged.
+
+## Current archive fetch mode
+
+The compact `research-latest.json` endpoint is not published on `main` yet (currently HTTP 404). Until it exists, `COMPACT_SNAPSHOT_ENABLED` in `app.js` stays `false`, so a fresh page makes one request to the canonical `research.json` archive instead of paying for a guaranteed 404 before the fallback. After the compact snapshot is merged and verified on `main`, enable the flag and rerun the browser/size gates.
