@@ -6,6 +6,7 @@ const test = require("node:test");
 const {
   LATEST_URL,
   ARCHIVE_URL,
+  COMPACT_SNAPSHOT_ENABLED,
   MAX_EXPERIMENTS,
   REQUEST_TIMEOUT_MS,
   REFRESH_MS,
@@ -80,7 +81,7 @@ function makeDocument() {
   };
 }
 
-function makeHarness(fetchImpl, start = 1000, storage = null) {
+function makeHarness(fetchImpl, start = 1000, storage = null, compactSnapshotEnabled = true) {
   const document = makeDocument();
   const calls = [];
   const timers = [];
@@ -104,7 +105,8 @@ function makeHarness(fetchImpl, start = 1000, storage = null) {
       constructor() { this.signal = {}; this.aborted = false; }
       abort() { this.aborted = true; }
     },
-    storage
+    storage,
+    compactSnapshotEnabled
   });
   return {
     controller,
@@ -125,6 +127,18 @@ test("archive validation rejects empty, malformed, and undated data", () => {
     experiments: []
   }]), true);
   assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", interpretation: "Missing experiments" }]), false);
+});
+
+test("live preview skips the unpublished compact snapshot on first view", async () => {
+  assert.equal(COMPACT_SNAPSHOT_ENABLED, false);
+  const h = makeHarness(async (url) => {
+    assert.equal(url, ARCHIVE_URL, "live preview should request only the published canonical archive");
+    return { ok: true, json: async () => archive("canonical archive") };
+  }, 1000, null, COMPACT_SNAPSHOT_ENABLED);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [ARCHIVE_URL]);
+  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "canonical archive");
 });
 
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {

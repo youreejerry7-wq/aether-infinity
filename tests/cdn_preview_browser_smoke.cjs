@@ -97,7 +97,7 @@ async function main() {
     assert.match(summary || "", /(Latest archived cycle:|archived cycles · latest:)/);
     assert.equal(status, "Latest archive record loaded");
     assert.ok(renderedRows > 0, "the public archive should render at least one experiment row");
-    assert.ok(externalRequests.length <= 2, "the initial view should make at most two archive requests");
+    assert.ok(externalRequests.length <= 1, "the initial view should make only one published archive request");
     assert.deepEqual(unexpectedExternal, [], "only the public GitHub Raw archive may be contacted");
     assert.deepEqual(flaskOrApiRequests, [], "the static preview must not wake or call the Flask service");
     assert.ok(

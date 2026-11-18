@@ -13,6 +13,9 @@
   const STORAGE_KEY = "aether.archive.preview.v2";
   const SNAPSHOT_MISSING_KEY = "aether.archive.preview.snapshot-missing-until.v1";
   const SNAPSHOT_MISSING_RECHECK_MS = 15 * 60 * 1000;
+  // Main does not publish research-latest.json yet; avoid a guaranteed first-view 404.
+  // Enable after the compact snapshot is merged and verified on main.
+  const COMPACT_SNAPSHOT_ENABLED = false;
 
   function isUsableArchive(data) {
     const latest = Array.isArray(data) ? data[0] : null;
@@ -34,6 +37,9 @@
     const clearTimeoutImpl = options.clearTimeoutImpl || clearTimeout;
     const AbortControllerImpl = options.AbortControllerImpl || AbortController;
     const storage = options.storage || null;
+    const compactSnapshotEnabled = options.compactSnapshotEnabled === undefined
+      ? COMPACT_SNAPSHOT_ENABLED
+      : options.compactSnapshotEnabled === true;
 
     let inFlight = false;
     let hasDisplayedArchive = false;
@@ -163,7 +169,7 @@
 
     async function fetchArchive(cache, signal) {
       const options = { cache, signal };
-      if (cache === "reload" || now() >= snapshotMissingUntil) {
+      if (compactSnapshotEnabled && (cache === "reload" || now() >= snapshotMissingUntil)) {
         const latestResponse = await fetchImpl(LATEST_URL, options);
         if (latestResponse && latestResponse.ok) {
           try {
@@ -268,6 +274,7 @@
     STORAGE_KEY,
     SNAPSHOT_MISSING_KEY,
     SNAPSHOT_MISSING_RECHECK_MS,
+    COMPACT_SNAPSHOT_ENABLED,
     isUsableArchive,
     createController
   };
