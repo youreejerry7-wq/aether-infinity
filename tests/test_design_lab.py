@@ -31,6 +31,35 @@ class BoxDesignLabTests(unittest.TestCase):
             self.assertLessEqual(abs(width - 20), 0.5)
             self.assertLessEqual(abs(height - 30), 0.5)
 
+    def test_seed_inputs_are_unsigned_64_bit_integers(self):
+        invalid_seeds = (True, False, -1, 2**64, 1.5, "42", None)
+        for seed in invalid_seeds:
+            with self.subTest(seed=repr(seed)):
+                with self.assertRaises(ValueError):
+                    lab.training_sheets(seed)
+                with self.assertRaises(ValueError):
+                    lab.run(seed)
+                with self.assertRaises(ValueError):
+                    lab.distributional_holdout_report(4.0, seed=seed)
+
+        self.assertEqual(lab.run(0)["seed"], 0)
+        self.assertEqual(lab.run(2**64 - 1)["seed"], 2**64 - 1)
+        with self.assertRaises(ValueError):
+            lab.run_complete_report(True)
+
+    def test_complete_report_wraps_derived_holdout_seed_at_uint64_boundary(self):
+        from unittest.mock import patch
+
+        measured = {
+            "seed": 2**64 - 1,
+            "candidate": {"cut_cm": 4.0},
+            "negative_control": {"cut_cm": 7.5},
+            "performance": {},
+        }
+        with patch.object(lab, "run_measured", return_value=measured):
+            report = lab.run_complete_report(2**64 - 1)
+        self.assertEqual(report["distributional_holdout"]["seed"], 0)
+
     def test_grid_search_uses_training_only(self):
         training = lab.training_sheets(lab.SEED)
         scores = {x: lab.mean_volume(training, x) for x in lab.CUT_GRID}
