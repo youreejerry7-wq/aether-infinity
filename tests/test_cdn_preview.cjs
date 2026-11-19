@@ -595,3 +595,35 @@ test("static preview keeps its dependency surface small and same-origin", () => 
   assert.match(html, /connect-src https:\/\/raw\.githubusercontent\.com/);
   assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic|googletagmanager|doubleclick/i);
 });
+
+
+test("default controller prefers the compact snapshot when it is published", async () => {
+  const document = makeDocument();
+  const calls = [];
+  const controller = createController({
+    document,
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => archive("default compact snapshot")
+      };
+    },
+    now: () => 1000,
+    setTimeoutImpl: () => 1,
+    clearTimeoutImpl: () => {},
+    AbortControllerImpl: class {
+      constructor() { this.signal = {}; }
+      abort() {}
+    },
+    storage: null
+  });
+
+  assert.equal(await controller.refresh(false), true);
+  assert.deepEqual(calls, [LATEST_URL]);
+  assert.equal(
+    document.nodes.experiments.children[0].children[0].textContent,
+    "default compact snapshot"
+  );
+});
