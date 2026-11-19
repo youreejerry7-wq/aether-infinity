@@ -42,6 +42,13 @@ PRIOR_ART = (
 )
 
 
+def _validate_seed(seed):
+    """Require a reproducible unsigned 64-bit integer seed."""
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2**64:
+        raise ValueError("seed must be an unsigned 64-bit integer")
+    return seed
+
+
 def _is_finite_real(value):
     """Accept finite real dimensions/cuts, but reject bool and non-numeric inputs."""
     if isinstance(value, bool) or not isinstance(value, Real):
@@ -63,6 +70,7 @@ def box_volume(width, height, cut):
 
 def training_sheets(seed=SEED):
     """Seeded bounded perturbations, independent of the fixed holdout."""
+    seed = _validate_seed(seed)
     rng = random.Random(seed)
     return tuple(
         (TRAIN_SHEET[0] + rng.uniform(-0.5, 0.5),
@@ -225,6 +233,7 @@ def range_robustness_report(
     }
 
 def run(seed=SEED):
+    seed = _validate_seed(seed)
     sheets = training_sheets(seed)
     scores = {cut: mean_volume(sheets, cut) for cut in CUT_GRID}
     # Fixed grid and deterministic tie-break; no adaptive holdout peeking.
@@ -305,6 +314,7 @@ def distributional_holdout_report(
     It is a robustness diagnostic over the stated rectangle ranges, not a
     confidence interval, population guarantee, novelty check, or physical test.
     """
+    seed = _validate_seed(seed)
     if (
         not isinstance(case_count, int)
         or isinstance(case_count, bool)
@@ -503,13 +513,14 @@ def run_complete_report(seed=SEED):
     per-run benchmark above excludes the distributional holdout; these fields
     make that additional verification cost visible.
     """
+    seed = _validate_seed(seed)
     complete_started = time.perf_counter()
     report = run_measured(seed)
     holdout_started = time.perf_counter()
     report["distributional_holdout"] = distributional_holdout_report(
         candidate_cut=report["candidate"]["cut_cm"],
         negative_control_cut=report["negative_control"]["cut_cm"],
-        seed=seed + 1,
+        seed=(seed + 1) % (2 ** 64),
     )
     holdout_elapsed = time.perf_counter() - holdout_started
     performance = report.setdefault("performance", {})
