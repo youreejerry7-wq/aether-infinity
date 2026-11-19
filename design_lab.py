@@ -250,6 +250,9 @@ def run(seed=SEED):
         "problem": "Open-top folded box from rectangular sheet (synthetic geometry)",
         "formula": "V=x*(W-2*x)*(H-2*x), 0<x<min(W,H)/2",
         "objective": "Maximize mean modeled volume on seeded training sheets",
+        "hypothesis_source": "predeclared_model_statement",
+        "hypothesis_generation_status": "not_implemented",
+        "distinct_hypotheses_generated": 0,
         "hypothesis": "The training-selected cut improves modeled volume over a fixed 2 cm baseline on every holdout sheet",
         "falsification": "Any holdout improvement <= 0 rejects the stated hypothesis",
         "seed": seed,
@@ -451,7 +454,7 @@ def run_measured(seed=SEED):
     model_evaluations = report["workload"]["total_model_evaluations"]
     hypotheses = report["workload"]["hypotheses_evaluated"]
     design_candidates = report["workload"]["design_candidates_evaluated"]
-    seconds_per_hypothesis = (
+    seconds_per_hypothesis_evaluation = (
         median_seconds_per_run / hypotheses if hypotheses > 0 else None
     )
     report["performance"] = {
@@ -473,19 +476,19 @@ def run_measured(seed=SEED):
         "design_candidates_evaluated": design_candidates,
         "elapsed_seconds": round(sum(seconds_per_run) * BENCHMARK_REPETITIONS_PER_BATCH, 6),
         "median_seconds_per_run": round(median_seconds_per_run, 6),
-        "seconds_per_hypothesis": (
-            round(seconds_per_hypothesis, 6)
-            if seconds_per_hypothesis is not None else None
+        "seconds_per_hypothesis_evaluation": (
+            round(seconds_per_hypothesis_evaluation, 6)
+            if seconds_per_hypothesis_evaluation is not None else None
         ),
-        "min_seconds_per_hypothesis": (
+        "min_seconds_per_hypothesis_evaluation": (
             round(min(seconds_per_run) / hypotheses, 6)
             if hypotheses > 0 else None
         ),
-        "max_seconds_per_hypothesis": (
+        "max_seconds_per_hypothesis_evaluation": (
             round(max(seconds_per_run) / hypotheses, 6)
             if hypotheses > 0 else None
         ),
-        "hypotheses_per_second": (
+        "hypothesis_evaluations_per_second": (
             round(hypotheses / median_seconds_per_run, 2)
             if median_seconds_per_run > 0 else None
         ),
@@ -504,7 +507,8 @@ def run_measured(seed=SEED):
         "measurement_scope": (
             "Median of 5 batches of 100 in-process run() calls; includes training, "
             "grid scoring, analytic reference, fixed holdouts, and exact range bounds; excludes interpreter "
-            "startup and JSON serialization."
+            "startup and JSON serialization. The 500 repetitions re-evaluate the same predeclared "
+            "hypothesis; no distinct hypothesis generation or novelty search is measured."
         ),
         "comparability": (
             "Diagnostic only; CPU model/quota, system load, runner image, and energy "
