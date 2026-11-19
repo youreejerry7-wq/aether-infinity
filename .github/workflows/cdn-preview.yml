@@ -163,7 +163,7 @@ jobs:
             sleep 5
           done
           test "$html_match" = "1"
-          asset_path=$(grep -oE 'src="./app.js\\?v=[0-9a-f]{12}"' "$RUNNER_TEMP/cdn-preview.html" | head -n1 | sed 's/^src="//;s/"$//')
+          asset_path=$(grep -oE 'src="./app.js\?v=[0-9a-f]{12}"' "$RUNNER_TEMP/cdn-preview.html" | head -n1 | sed 's/^src="//;s/"$//')
           test -n "$asset_path"
           asset_url="${asset_path#./}"
           echo "static_home matches checked-out PR asset sha256=$(sha256sum cdn-preview/index.html | cut -d' ' -f1)"
