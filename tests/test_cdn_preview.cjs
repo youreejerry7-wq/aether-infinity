@@ -597,17 +597,18 @@ test("static preview keeps its dependency surface small and same-origin", () => 
 });
 
 
-test("default controller prefers the compact snapshot when it is published", async () => {
+test("default controller skips the unpublished compact snapshot", async () => {
   const document = makeDocument();
   const calls = [];
   const controller = createController({
     document,
     fetchImpl: async (url) => {
       calls.push(url);
+      assert.equal(url, ARCHIVE_URL, "do not add a 404 request before the snapshot is published");
       return {
         ok: true,
         status: 200,
-        json: async () => archive("default compact snapshot")
+        json: async () => archive("default full archive")
       };
     },
     now: () => 1000,
@@ -621,9 +622,9 @@ test("default controller prefers the compact snapshot when it is published", asy
   });
 
   assert.equal(await controller.refresh(false), true);
-  assert.deepEqual(calls, [LATEST_URL]);
+  assert.deepEqual(calls, [ARCHIVE_URL]);
   assert.equal(
     document.nodes.experiments.children[0].children[0].textContent,
-    "default compact snapshot"
+    "default full archive"
   );
 });
