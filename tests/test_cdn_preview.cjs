@@ -514,7 +514,7 @@ test("initial HTML stays lightweight and avoids third-party render-blocking asse
   // A small document and one deferred local script keep first paint independent
   // of third-party JavaScript, font, stylesheet, or iframe requests.
   assert.ok(Buffer.byteLength(html, "utf8") <= 4096, "initial HTML must stay under 4 KiB");
-  assert.match(html, /<script\s+src=["']\.\/app\.js["']\s+defer\s*>\s*<\/script>/i);
+  assert.match(html, /<script\s+src=["']\.\/app\.js\?v=[a-f0-9]{12}["']\s+defer\s*>\s*<\/script>/i);
   assert.doesNotMatch(html, /<script\b[^>]*\bsrc=["']https?:\/\//i);
   const linkTags = html.split("<link").slice(1).map((part) => "<link" + part.slice(0, part.indexOf(">") + 1));
   const externalLinks = linkTags.filter((tag) => tag.includes('href="https://'));
