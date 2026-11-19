@@ -165,6 +165,113 @@ def _bootstrap_uncertainty(errors, durations, seed, resamples=BOOTSTRAP_RESAMPLE
     }
 
 
+
+def _bootstrap_error_time_efficiency(
+    baseline_errors,
+    baseline_durations,
+    candidate_errors,
+    candidate_durations,
+    seed,
+    resamples=BOOTSTRAP_RESAMPLES,
+    paired=False,
+):
+    """Bootstrap the baseline/candidate ratio of RMSE^2 times median duration.
+
+    Paired mode resamples the same replication indices for both methods. Use
+    it only when replication indices share a deliberate common-random-number
+    block. Independent mode resamples each method's replications separately.
+    """
+    if len(baseline_errors) != len(baseline_durations) or len(baseline_errors) < 2:
+        raise ValueError("baseline errors and durations must have the same length of at least two")
+    if len(candidate_errors) != len(candidate_durations) or len(candidate_errors) < 2:
+        raise ValueError("candidate errors and durations must have the same length of at least two")
+    if paired and len(baseline_errors) != len(candidate_errors):
+        raise ValueError("paired bootstrap requires equal baseline and candidate replication counts")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ValueError("bootstrap seed must be an integer")
+    if (isinstance(resamples, bool) or not isinstance(resamples, int)
+            or not 100 <= resamples <= 10_000):
+        raise ValueError("bootstrap resamples must be an integer between 100 and 10,000")
+
+    for errors in (baseline_errors, candidate_errors):
+        if any(not math.isfinite(value) for value in errors):
+            raise ValueError("bootstrap errors must be finite")
+    for durations in (baseline_durations, candidate_durations):
+        if any(not math.isfinite(value) or value <= 0 for value in durations):
+            raise ValueError("bootstrap durations must be finite and positive")
+
+    rng = random.Random(seed)
+    ratios = []
+    undefined_resamples = 0
+    for _ in range(resamples):
+        if paired:
+            shared_indices = [
+                rng.randrange(len(baseline_errors))
+                for _ in range(len(baseline_errors))
+            ]
+            baseline_indices = shared_indices
+            candidate_indices = shared_indices
+        else:
+            baseline_indices = [
+                rng.randrange(len(baseline_errors))
+                for _ in range(len(baseline_errors))
+            ]
+            candidate_indices = [
+                rng.randrange(len(candidate_errors))
+                for _ in range(len(candidate_errors))
+            ]
+
+        baseline_mse = math.fsum(
+            baseline_errors[index] ** 2 for index in baseline_indices
+        ) / len(baseline_indices)
+        candidate_mse = math.fsum(
+            candidate_errors[index] ** 2 for index in candidate_indices
+        ) / len(candidate_indices)
+        baseline_metric = baseline_mse * statistics.median(
+            baseline_durations[index] for index in baseline_indices
+        )
+        candidate_metric = candidate_mse * statistics.median(
+            candidate_durations[index] for index in candidate_indices
+        )
+        if candidate_metric <= 0:
+            undefined_resamples += 1
+            continue
+        ratios.append(baseline_metric / candidate_metric)
+
+    interval = None
+    if undefined_resamples == 0:
+        interval = {
+            "lower": _percentile_interval(ratios, 0.025),
+            "upper": _percentile_interval(ratios, 0.975),
+        }
+
+    return {
+        "method": (
+            "paired_between_method_percentile_bootstrap"
+            if paired else "independent_between_method_percentile_bootstrap"
+        ),
+        "confidence_level": 0.95,
+        "resamples": resamples,
+        "valid_resamples": len(ratios),
+        "undefined_resamples": undefined_resamples,
+        "efficiency_ratio": interval,
+        "replications": {
+            "baseline": len(baseline_errors),
+            "candidate": len(candidate_errors),
+        },
+        "replicate_count_warning": (
+            "Fewer than 30 replications; percentile interval is exploratory."
+            if min(len(baseline_errors), len(candidate_errors)) < 30 else None
+        ),
+        "scope": (
+            "Interval for baseline RMSE^2 times median duration divided by "
+            "candidate RMSE^2 times median duration. Paired mode resamples "
+            "shared replication indices; independent mode resamples each "
+            "method separately. Within-runner uncertainty only; no "
+            "cross-machine, processor-quota, energy, or cost uncertainty."
+        ),
+    }
+
 def benchmark(samples=10_000, replicates=24, seed=2026):
     """Return reproducible accuracy metrics and measured local timings.
 
@@ -272,6 +379,23 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             if value["observed_rmse_squared_seconds"] else None
         )
 
+    baseline_data = trial_data["circle_hits"]
+    baseline_errors = [
+        estimate - math.pi for estimate in baseline_data["estimates"]
+    ]
+    for name, data in trial_data.items():
+        method_index = tuple(METHODS).index(name)
+        results[name]["observed_error_time_efficiency_bootstrap"] = (
+            _bootstrap_error_time_efficiency(
+                baseline_errors,
+                baseline_data["durations"],
+                [estimate - math.pi for estimate in data["estimates"]],
+                data["durations"],
+                seed ^ (0xEFF1C1E + 104729 * method_index),
+                paired=True,
+            )
+        )
+
     return {
         "environment": benchmark_environment(),
         "variance_reference_setup": {
@@ -286,7 +410,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "replications": replicates,
         "seed": seed,
         "execution_order_by_replication": execution_order,
-        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration; these intervals do not capture cross-machine uncertainty.",
+        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method reports a paired-within-method 95% percentile-bootstrap interval for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios also have a paired percentile-bootstrap interval, resampling shared per-replication indices because fixed-sample methods use the same RNG seed within each replication. These intervals are exploratory below 30 replications and do not capture cross-machine uncertainty.",
         "results": results,
     }
 
@@ -506,6 +630,21 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             if metrics["theoretical_standard_error_squared_seconds"] > 0 else None
         )
 
+    baseline_data = trial_data["circle_hits"]
+    for name in method_names:
+        data = trial_data[name]
+        method_index = method_indices[name]
+        results[name]["observed_error_time_efficiency_bootstrap"] = (
+            _bootstrap_error_time_efficiency(
+                baseline_data["errors"],
+                baseline_data["durations"],
+                data["errors"],
+                data["durations"],
+                seed ^ (0xEFF1C1E + 104729 * method_index),
+                paired=(name == "circle_hits"),
+            )
+        )
+
     report = {
         "environment": benchmark_environment(),
         "variance_reference_setup": {
@@ -534,7 +673,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "observed RMSE is seed-specific. Matched-time reports include observed RMSE^2*time "
             "and model-based SE^2*time efficiency ratios versus the hit-or-miss baseline. "
             "Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. "
-            "Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration; these intervals do not capture cross-machine uncertainty. No quantum, hardware-independent, or universal speed claim."
+            "Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios include a 95% percentile-bootstrap interval, independently resampling each method because matched-time trials use method-specific RNG streams; intervals are exploratory below 30 replications and do not capture cross-machine uncertainty. No quantum, hardware-independent, or universal speed claim."
         ),
         "target_seconds_per_replication": budget_seconds,
         "replications": replicates,
