@@ -272,7 +272,9 @@ def run(seed=SEED):
                 + 2 * 2 * len(HOLDOUT_SHEETS)
                 + 8
             ),
+            # One predeclared hypothesis is tested using this fixed grid of designs.
             "hypotheses_evaluated": 1,
+            "design_candidates_evaluated": len(CUT_GRID),
         },
         "training_sheet_cm": list(TRAIN_SHEET),
         "training_jitter_cm": 0.5,
@@ -448,6 +450,7 @@ def run_measured(seed=SEED):
     evaluations = report["workload"]["total_box_volume_evaluations"]
     model_evaluations = report["workload"]["total_model_evaluations"]
     hypotheses = report["workload"]["hypotheses_evaluated"]
+    design_candidates = report["workload"]["design_candidates_evaluated"]
     seconds_per_hypothesis = (
         median_seconds_per_run / hypotheses if hypotheses > 0 else None
     )
@@ -467,6 +470,7 @@ def run_measured(seed=SEED):
         "warmup_repetitions": BENCHMARK_WARMUP_REPETITIONS,
         "measured_repetitions": BENCHMARK_BATCHES * BENCHMARK_REPETITIONS_PER_BATCH,
         "hypotheses_evaluated": hypotheses,
+        "design_candidates_evaluated": design_candidates,
         "elapsed_seconds": round(sum(seconds_per_run) * BENCHMARK_REPETITIONS_PER_BATCH, 6),
         "median_seconds_per_run": round(median_seconds_per_run, 6),
         "seconds_per_hypothesis": (
@@ -483,6 +487,10 @@ def run_measured(seed=SEED):
         ),
         "hypotheses_per_second": (
             round(hypotheses / median_seconds_per_run, 2)
+            if median_seconds_per_run > 0 else None
+        ),
+        "design_candidates_per_second": (
+            round(design_candidates / median_seconds_per_run, 2)
             if median_seconds_per_run > 0 else None
         ),
         "box_volume_evaluations_per_second": (
@@ -526,6 +534,17 @@ def run_complete_report(seed=SEED):
     performance = report.setdefault("performance", {})
     performance["distributional_holdout_elapsed_seconds"] = round(
         holdout_elapsed, 6
+    )
+    holdout = report["distributional_holdout"]
+    holdout_cases = holdout["case_count"]
+    holdout_volume_evaluations = holdout["box_volume_evaluations"]
+    performance["distributional_holdout_cases_evaluated"] = holdout_cases
+    performance["distributional_holdout_cases_per_second"] = (
+        round(holdout_cases / holdout_elapsed, 2) if holdout_elapsed > 0 else None
+    )
+    performance["distributional_holdout_volume_evaluations_per_second"] = (
+        round(holdout_volume_evaluations / holdout_elapsed, 2)
+        if holdout_elapsed > 0 else None
     )
     performance["complete_report_elapsed_seconds"] = round(
         time.perf_counter() - complete_started, 6

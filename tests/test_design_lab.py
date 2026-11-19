@@ -215,6 +215,7 @@ class BoxDesignLabTests(unittest.TestCase):
             "total_box_volume_evaluations": 164,
             "total_model_evaluations": 172,
             "hypotheses_evaluated": 1,
+            "design_candidates_evaluated": 18,
         })
         self.assertEqual(report["workload"], lab.run()["workload"])
 
@@ -226,6 +227,7 @@ class BoxDesignLabTests(unittest.TestCase):
                 "total_box_volume_evaluations": 164,
                 "total_model_evaluations": 172,
                 "hypotheses_evaluated": 1,
+                "design_candidates_evaluated": 18,
             }
         }
         timings = (
@@ -251,6 +253,8 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(metrics["min_seconds_per_hypothesis"], 0.001)
         self.assertEqual(metrics["max_seconds_per_hypothesis"], 0.005)
         self.assertEqual(metrics["hypotheses_per_second"], 500.0)
+        self.assertEqual(metrics["design_candidates_evaluated"], 18)
+        self.assertEqual(metrics["design_candidates_per_second"], 9000.0)
         self.assertEqual(metrics["box_volume_evaluations_per_second"], 82000.0)
         self.assertEqual(metrics["model_evaluations_per_second"], 86000.0)
         self.assertIn("5 batches of 100", metrics["measurement_scope"])
@@ -381,7 +385,7 @@ class BoxDesignLabTests(unittest.TestCase):
             "candidate": {"cut_cm": 4.0},
             "negative_control": {"cut_cm": 7.5},
         }
-        holdout = {"seed": 2027, "case_count": 200}
+        holdout = {"seed": 2027, "case_count": 200, "box_volume_evaluations": 600}
         with patch.object(lab, "run_measured", return_value=sample) as measured:
             with patch.object(
                 lab, "distributional_holdout_report", return_value=holdout
@@ -403,7 +407,7 @@ class BoxDesignLabTests(unittest.TestCase):
             "negative_control": {"cut_cm": 7.5},
             "performance": {},
         }
-        holdout = {"box_volume_evaluations": 600}
+        holdout = {"case_count": 200, "box_volume_evaluations": 600}
         with patch.object(lab, "run_measured", return_value=sample):
             with patch.object(
                 lab, "distributional_holdout_report", return_value=holdout
@@ -422,6 +426,9 @@ class BoxDesignLabTests(unittest.TestCase):
             report["performance"]["complete_report_elapsed_seconds"],
             1.0,
         )
+        self.assertEqual(report["performance"]["distributional_holdout_cases_evaluated"], 200)
+        self.assertEqual(report["performance"]["distributional_holdout_cases_per_second"], 363.64)
+        self.assertEqual(report["performance"]["distributional_holdout_volume_evaluations_per_second"], 1090.91)
         self.assertIn(
             "500 timed run() repetitions",
             report["performance"]["complete_report_measurement_scope"],
