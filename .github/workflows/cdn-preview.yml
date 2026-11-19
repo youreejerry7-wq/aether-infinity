@@ -170,11 +170,13 @@ jobs:
           code=""
           for attempt in $(seq 1 12); do
             metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
+              -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
               -D "$RUNNER_TEMP/cdn-preview-js.headers" \
               -o "$RUNNER_TEMP/cdn-preview.js" \
               -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/app.js?ci=${GITHUB_SHA}" || true)
             read -r code ttfb total bytes <<< "${metrics:-}"
             echo "static_js attempt=$attempt HTTP=${code:-000} ttfb_seconds=${ttfb:-n/a} total_seconds=${total:-n/a} bytes=${bytes:-0}"
+            grep -Ei '^age:|^cf-cache-status:|^etag:|^cache-control:' "$RUNNER_TEMP/cdn-preview-js.headers" || true
             if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"; then
               break
             fi
