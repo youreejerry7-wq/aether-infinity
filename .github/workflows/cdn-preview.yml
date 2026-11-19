@@ -187,7 +187,6 @@ jobs:
             sleep 5
           done
           test "$js_match" = "1"
-          echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)
           echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
