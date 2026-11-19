@@ -13,6 +13,7 @@ from speed_lab import (
     allocate_sampling_budget,
     _calibrated_sample_counts,
     _bootstrap_uncertainty,
+    _bootstrap_error_time_efficiency,
     antithetic_1d,
     benchmark,
     benchmark_matched_time,
@@ -115,6 +116,12 @@ class SpeedLabTests(unittest.TestCase):
             self.assertEqual(uncertainty["resamples"], BOOTSTRAP_RESAMPLES)
             self.assertEqual(uncertainty["replications"], 3)
             self.assertLessEqual(uncertainty["rmse"]["lower"], uncertainty["rmse"]["upper"])
+            cross_method = metrics["observed_error_time_efficiency_bootstrap"]
+            self.assertEqual(
+                cross_method["method"],
+                "paired_between_method_percentile_bootstrap",
+            )
+            self.assertIsNotNone(cross_method["efficiency_ratio"])
 
     def test_analytic_errors_and_observed_error_time_are_explicit(self):
         data = benchmark(samples=1000, replicates=4, seed=17)
@@ -285,6 +292,14 @@ class SpeedLabTests(unittest.TestCase):
                 self.assertGreater(
                     metrics["theoretical_error_time_efficiency_vs_baseline"], 0
                 )
+                cross_method = metrics["observed_error_time_efficiency_bootstrap"]
+                expected_bootstrap = (
+                    "paired_between_method_percentile_bootstrap"
+                    if name == "circle_hits"
+                    else "independent_between_method_percentile_bootstrap"
+                )
+                self.assertEqual(cross_method["method"], expected_bootstrap)
+                self.assertIsNotNone(cross_method["efficiency_ratio"])
                 expected_basis = (
                     "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
                 )
@@ -545,6 +560,70 @@ class SpeedLabTests(unittest.TestCase):
             report["end_to_end_wall_seconds"],
             report["shared_setup_wall_seconds"] + report["measured_trials_wall_seconds"],
         )
+
+
+
+
+class CrossMethodEfficiencyBootstrapTests(unittest.TestCase):
+    def test_paired_bootstrap_reports_reproducible_efficiency_ratio(self):
+        baseline_errors = [2.0, -2.0, 2.0, -2.0]
+        candidate_errors = [1.0, -1.0, 1.0, -1.0]
+        baseline_durations = [0.01] * 4
+        candidate_durations = [0.01] * 4
+        first = _bootstrap_error_time_efficiency(
+            baseline_errors, baseline_durations,
+            candidate_errors, candidate_durations,
+            seed=19, resamples=200, paired=True,
+        )
+        second = _bootstrap_error_time_efficiency(
+            baseline_errors, baseline_durations,
+            candidate_errors, candidate_durations,
+            seed=19, resamples=200, paired=True,
+        )
+        self.assertEqual(first, second)
+        self.assertEqual(first["method"], "paired_between_method_percentile_bootstrap")
+        self.assertEqual(first["efficiency_ratio"], {"lower": 4.0, "upper": 4.0})
+        self.assertEqual(first["valid_resamples"], 200)
+        self.assertEqual(first["undefined_resamples"], 0)
+        self.assertIsNotNone(first["replicate_count_warning"])
+
+    def test_independent_bootstrap_includes_duration_tradeoff(self):
+        result = _bootstrap_error_time_efficiency(
+            [2.0, -2.0, 2.0, -2.0], [0.01] * 4,
+            [1.0, -1.0, 1.0, -1.0], [0.005] * 4,
+            seed=23, resamples=200, paired=False,
+        )
+        self.assertEqual(
+            result["method"],
+            "independent_between_method_percentile_bootstrap",
+        )
+        self.assertEqual(result["efficiency_ratio"], {"lower": 8.0, "upper": 8.0})
+        self.assertEqual(result["valid_resamples"], 200)
+
+    def test_zero_candidate_error_marks_ratio_interval_undefined(self):
+        result = _bootstrap_error_time_efficiency(
+            [1.0, -1.0, 1.0, -1.0], [0.01] * 4,
+            [0.0, 0.0, 0.0, 0.0], [0.01] * 4,
+            seed=29, resamples=100, paired=False,
+        )
+        self.assertIsNone(result["efficiency_ratio"])
+        self.assertEqual(result["valid_resamples"], 0)
+        self.assertEqual(result["undefined_resamples"], 100)
+
+    def test_between_method_bootstrap_validates_inputs(self):
+        valid_errors = [1.0, -1.0]
+        valid_durations = [0.01, 0.02]
+        invalid_cases = (
+            (valid_errors[:1], valid_durations[:1], valid_errors, valid_durations, 7, 100, False),
+            (valid_errors, valid_durations, valid_errors[:1], valid_durations[:1], 7, 100, True),
+            (valid_errors, valid_durations, [float("nan"), 1.0], valid_durations, 7, 100, False),
+            (valid_errors, [0.01, 0.0], valid_errors, valid_durations, 7, 100, False),
+            (valid_errors, valid_durations, valid_errors, valid_durations, True, 100, False),
+            (valid_errors, valid_durations, valid_errors, valid_durations, 7, 99, False),
+        )
+        for args in invalid_cases:
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                _bootstrap_error_time_efficiency(*args)
 
 
 if __name__ == "__main__":
