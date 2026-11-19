@@ -105,7 +105,7 @@ def continuous_training_optimum(sheets):
 
 
 def evaluate(cut, holdout=HOLDOUT_SHEETS):
-    """Holdout check versus a predeclared baseline; no training score used."""
+    """Compare a holdout cut with a fixed baseline and each sheet's analytic optimum."""
     # Reject invalid test fixtures rather than silently scoring zero-volume
     # geometry as a meaningful failure or success.
     if not holdout or not _is_finite_real(cut) or cut <= 0:
@@ -117,7 +117,22 @@ def evaluate(cut, holdout=HOLDOUT_SHEETS):
             raise ValueError("Both baseline and candidate cuts must be feasible")
     baseline = [box_volume(w, h, BASELINE_CUT) for w, h in holdout]
     candidate = [box_volume(w, h, cut) for w, h in holdout]
+    optimal_cuts = [
+        continuous_training_optimum(((width, height),))
+        for width, height in holdout
+    ]
+    optimal_volumes = [
+        box_volume(width, height, optimal_cut)
+        for (width, height), optimal_cut in zip(holdout, optimal_cuts)
+    ]
     differences = [a - b for a, b in zip(candidate, baseline)]
+    optimality_gaps = [
+        max(0.0, optimum - actual)
+        for optimum, actual in zip(optimal_volumes, candidate)
+    ]
+    optimality_gap_fractions = [
+        gap / optimum for gap, optimum in zip(optimality_gaps, optimal_volumes)
+    ]
     return {
         "cut_cm": cut,
         "holdout_volumes_cm3": candidate,
@@ -126,6 +141,18 @@ def evaluate(cut, holdout=HOLDOUT_SHEETS):
         "mean_holdout_improvement_cm3": statistics.fmean(differences),
         "minimum_holdout_improvement_cm3": min(differences),
         "passed_all_holdouts": all(delta > 0 for delta in differences),
+        "analytic_optimal_cuts_cm": optimal_cuts,
+        "analytic_optimal_volumes_cm3": optimal_volumes,
+        "cut_optimality_gaps_cm3": optimality_gaps,
+        "cut_optimality_gap_fractions": optimality_gap_fractions,
+        "maximum_cut_optimality_gap_fraction": max(optimality_gap_fractions),
+        "respects_analytic_upper_bound": all(
+            actual <= optimum + 1e-9
+            for actual, optimum in zip(candidate, optimal_volumes)
+        ),
+        "optimality_reference_method": (
+            "Per-sheet analytic stationary point of the established cubic volume model"
+        ),
     }
 
 
@@ -262,18 +289,22 @@ def run(seed=SEED):
             "continuous_reference_evaluations": len(sheets),
             # Two holdout reports (candidate and negative control), each scoring
             # both the selected cut and the fixed baseline on every holdout.
-            "holdout_volume_evaluations": 2 * 2 * len(HOLDOUT_SHEETS),
+            # Candidate, baseline, and analytic-optimum volume for each of
+            # the candidate and negative-control reports.
+            "holdout_volume_evaluations": 2 * 3 * len(HOLDOUT_SHEETS),
+            "analytic_holdout_optimum_solves": 2 * len(HOLDOUT_SHEETS),
             "range_corner_difference_evaluations": 8,
             "total_box_volume_evaluations": (
                 len(CUT_GRID) * len(sheets)
                 + len(sheets)
-                + 2 * 2 * len(HOLDOUT_SHEETS)
+                + 2 * 3 * len(HOLDOUT_SHEETS)
             ),
             "total_model_evaluations": (
                 len(CUT_GRID) * len(sheets)
                 + len(sheets)
-                + 2 * 2 * len(HOLDOUT_SHEETS)
+                + 2 * 3 * len(HOLDOUT_SHEETS)
                 + 8
+                + 2 * len(HOLDOUT_SHEETS)
             ),
             # One predeclared hypothesis is tested using this fixed grid of designs.
             "hypotheses_evaluated": 1,
