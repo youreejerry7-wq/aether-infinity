@@ -123,6 +123,46 @@ class BoxDesignLabTests(unittest.TestCase):
                          [176.0, 256.0, 202.0])
         self.assertTrue(result["passed_all_holdouts"])
 
+    def test_holdout_cuts_are_compared_with_per_sheet_analytic_optima(self):
+        candidate = lab.evaluate(4.0)
+        self.assertEqual(
+            candidate["optimality_reference_method"],
+            "Per-sheet analytic stationary point of the established cubic volume model",
+        )
+        expected_gaps = []
+        for (width, height), cut, optimum_volume, actual_volume, gap, fraction in zip(
+            lab.HOLDOUT_SHEETS,
+            candidate["analytic_optimal_cuts_cm"],
+            candidate["analytic_optimal_volumes_cm3"],
+            candidate["holdout_volumes_cm3"],
+            candidate["cut_optimality_gaps_cm3"],
+            candidate["cut_optimality_gap_fractions"],
+        ):
+            expected_cut = (
+                width + height - math.sqrt(width * width - width * height + height * height)
+            ) / 6
+            expected_volume = lab.box_volume(width, height, expected_cut)
+            self.assertAlmostEqual(cut, expected_cut, places=12)
+            self.assertAlmostEqual(optimum_volume, expected_volume, places=9)
+            self.assertLessEqual(actual_volume, optimum_volume + 1e-9)
+            self.assertAlmostEqual(gap, max(0.0, optimum_volume - actual_volume), places=9)
+            self.assertAlmostEqual(fraction, gap / optimum_volume, places=12)
+            expected_gaps.append(fraction)
+
+        self.assertAlmostEqual(
+            candidate["maximum_cut_optimality_gap_fraction"],
+            max(expected_gaps),
+            places=12,
+        )
+        self.assertLess(candidate["maximum_cut_optimality_gap_fraction"], 0.005)
+        self.assertTrue(candidate["respects_analytic_upper_bound"])
+
+        rejected_control = lab.evaluate(7.5)
+        self.assertGreater(
+            rejected_control["maximum_cut_optimality_gap_fraction"], 0.60
+        )
+        self.assertTrue(rejected_control["respects_analytic_upper_bound"])
+
     def test_analytic_oracle_matches_independent_dense_grid(self):
         # Independent numerical sweep catches wrong derivative/root selection.
         sheets = lab.training_sheets(lab.SEED)
@@ -213,10 +253,11 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertEqual(report["workload"], {
             "training_grid_evaluations": 144,
             "continuous_reference_evaluations": 8,
-            "holdout_volume_evaluations": 12,
+            "holdout_volume_evaluations": 18,
+            "analytic_holdout_optimum_solves": 6,
             "range_corner_difference_evaluations": 8,
-            "total_box_volume_evaluations": 164,
-            "total_model_evaluations": 172,
+            "total_box_volume_evaluations": 170,
+            "total_model_evaluations": 184,
             "hypotheses_evaluated": 1,
             "design_candidates_evaluated": 18,
         })
@@ -227,8 +268,8 @@ class BoxDesignLabTests(unittest.TestCase):
 
         sample = {
             "workload": {
-                "total_box_volume_evaluations": 164,
-                "total_model_evaluations": 172,
+                "total_box_volume_evaluations": 170,
+                "total_model_evaluations": 184,
                 "hypotheses_evaluated": 1,
                 "design_candidates_evaluated": 18,
             }
@@ -260,8 +301,8 @@ class BoxDesignLabTests(unittest.TestCase):
         self.assertIn("same predeclared", metrics["measurement_scope"])
         self.assertEqual(metrics["design_candidates_evaluated"], 18)
         self.assertEqual(metrics["design_candidates_per_second"], 9000.0)
-        self.assertEqual(metrics["box_volume_evaluations_per_second"], 82000.0)
-        self.assertEqual(metrics["model_evaluations_per_second"], 86000.0)
+        self.assertEqual(metrics["box_volume_evaluations_per_second"], 85000.0)
+        self.assertEqual(metrics["model_evaluations_per_second"], 92000.0)
         self.assertIn("5 batches of 100", metrics["measurement_scope"])
         self.assertIn("same code, runner, and protocol", metrics["comparability"])
         environment = metrics["runtime_environment"]
