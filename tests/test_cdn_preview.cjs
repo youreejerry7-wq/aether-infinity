@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -581,9 +582,14 @@ test("static preview keeps its dependency surface small and same-origin", () => 
   const preconnects = [...html.matchAll(/<link\b[^>]*\brel=["']preconnect["'][^>]*>/gi)]
     .map((match) => match[0]);
 
+  // Pin the script URL to its Git blob so CDN edges cannot serve a stale app.js after deploy.
+  const script = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"));
+  const blobHeader = Buffer.from(`blob ${script.length}\0`);
+  const blobSha = crypto.createHash("sha1").update(Buffer.concat([blobHeader, script])).digest("hex");
+  assert.deepEqual(scriptSources, [`./app.js?v=${blobSha.slice(0, 12)}`]);
+  assert.ok(html.includes(`<script src="./app.js?v=${blobSha.slice(0, 12)}" defer></script>`));
+
   // Keep first paint independent of third-party scripts, fonts, and stylesheets.
-  assert.deepEqual(scriptSources, ["./app.js"]);
-  assert.match(html, /<script src=["']\.\/app\.js["'] defer>/i);
   assert.equal(stylesheetLinks.length, 0);
   assert.equal(preconnects.length, 1);
   assert.match(preconnects[0], /href=["']https:\/\/raw\.githubusercontent\.com["']/i);
