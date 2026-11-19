@@ -161,7 +161,7 @@
 
     async function fetchArchive(cache, signal) {
       const init = { cache, signal };
-      if (options.compactSnapshotEnabled !== false && (cache === "reload" || now() >= snapshotMissingUntil)) {
+      if (options.compactSnapshotEnabled === true && (cache === "reload" || now() >= snapshotMissingUntil)) {
         const latestResponse = await fetchImpl(LATEST_URL, init);
         if (latestResponse && latestResponse.ok) {
           try {
