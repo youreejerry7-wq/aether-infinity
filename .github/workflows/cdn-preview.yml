@@ -137,7 +137,7 @@ jobs:
     # This does not validate or replace the existing Flask production service.
     needs: preview
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
       - name: Verify the isolated Render Static Site over public HTTP
@@ -145,30 +145,32 @@ jobs:
         run: |
           set -euo pipefail
           base="https://aether-cdn-preview.onrender.com"
-          code=""
-          for attempt in $(seq 1 12); do
+          html_match=0
+          for attempt in $(seq 1 60); do
             if metrics=$(curl -sS -L --connect-timeout 5 --max-time 8 \
+              -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
               -D "$RUNNER_TEMP/cdn-preview.headers" \
               -o "$RUNNER_TEMP/cdn-preview.html" \
               -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/"); then
               read -r code ttfb total bytes <<< "$metrics"
               echo "static_home attempt=$attempt HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
-              if [ "$code" = "200" ]; then break; fi
+              if [ "$code" = "200" ] && grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview.html" && grep -q 'script src="./app.js"' "$RUNNER_TEMP/cdn-preview.html" && cmp --silent "$RUNNER_TEMP/cdn-preview.html" cdn-preview/index.html; then
+                html_match=1
+                break
+              fi
+              echo "::notice::Waiting for the current HTML asset to reach the CDN edge."
             fi
             sleep 5
           done
-          test "$code" = "200"
-          grep -q '<h1>AETHER ∞</h1>' "$RUNNER_TEMP/cdn-preview.html"
-          grep -q 'script src="./app.js"' "$RUNNER_TEMP/cdn-preview.html"
-          cmp --silent "$RUNNER_TEMP/cdn-preview.html" cdn-preview/index.html
+          test "$html_match" = "1"
           echo "static_home matches checked-out PR asset sha256=$(sha256sum cdn-preview/index.html | cut -d' ' -f1)"
           grep -Ei '^content-type:|^cache-control:' "$RUNNER_TEMP/cdn-preview.headers" || true
           grep -Eiq '^content-type:[[:space:]]*text/html' "$RUNNER_TEMP/cdn-preview.headers"
           grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview.headers"
 
-          # A per-run query key bypasses a previous JS response still cached for s-maxage=300.
-          code=""
-          for attempt in $(seq 1 12); do
+          # A unique query and revalidation request help diagnose edge-cache propagation.
+          js_match=0
+          for attempt in $(seq 1 60); do
             metrics=$(curl -sS -L --connect-timeout 5 --max-time 12 \
               -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
               -D "$RUNNER_TEMP/cdn-preview-js.headers" \
@@ -176,14 +178,16 @@ jobs:
               -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/app.js?ci=${GITHUB_SHA}" || true)
             read -r code ttfb total bytes <<< "${metrics:-}"
             echo "static_js attempt=$attempt HTTP=${code:-000} ttfb_seconds=${ttfb:-n/a} total_seconds=${total:-n/a} bytes=${bytes:-0}"
-            grep -Ei '^age:|^cf-cache-status:|^etag:|^cache-control:' "$RUNNER_TEMP/cdn-preview-js.headers" || true
-            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"; then
+            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js" && cmp --silent "$RUNNER_TEMP/cdn-preview.js" cdn-preview/app.js; then
+              js_match=1
               break
             fi
+            grep -Ei '^age:|^cf-cache-status:|^etag:|^cache-control:' "$RUNNER_TEMP/cdn-preview-js.headers" || true
+            echo "::notice::Waiting for the current JavaScript asset to reach the CDN edge."
             sleep 5
           done
-          test "$code" = "200"
-          cmp --silent "$RUNNER_TEMP/cdn-preview.js" cdn-preview/app.js
+          test "$js_match" = "1"
+          echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)
           echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
