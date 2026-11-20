@@ -310,8 +310,8 @@ async function fetchInteractiveJsonWithTimeout(url, options = {}, timeoutMs = 60
   try {
     const response = await fetch(url, { ...options, signal: controller.signal });
     if (!response.ok) {
-      // PR #10 proposes a server-side compute cap; explain HTTP 429 without
-      // exposing response bodies or encouraging immediate repeat requests.
+      // Explain HTTP 429 without exposing response bodies or encouraging
+      // immediate repeat requests.
       if (response.status === 429) throw Error('Demo rate limited');
       throw Error('Request unavailable');
     }
