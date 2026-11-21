@@ -144,7 +144,7 @@ test("live preview skips the unpublished compact snapshot on first view", async 
   // pays for a guaranteed 404 before the full archive request.
   const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
   const browserBootstrap = source.slice(source.lastIndexOf("if (root.document"));
-  assert.doesNotMatch(browserBootstrap, /compactSnapshotEnabled\\s*:\\s*true/);
+  assert.doesNotMatch(browserBootstrap, /compactSnapshotEnabled\s*:\s*true/);
 });
 
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {
