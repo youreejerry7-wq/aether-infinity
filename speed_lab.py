@@ -595,6 +595,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
                 "numerical_midpoint_16384" if name == "antithetic_1d" else "analytic"
             ),
             "median_observed_seconds": median_observed,
+            "median_time_as_fraction_of_target": median_observed / budget_seconds,
             "observed_rmse_squared_seconds": rmse * rmse * median_observed,
             "theoretical_standard_error_squared_seconds": (
                 theoretical_se * theoretical_se * median_observed
@@ -660,8 +661,12 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         ),
         "measured_trials_wall_seconds": measured_trials_wall_seconds,
         "methodology": (
-            "Measured trials with separately calibrated sampling-unit counts near "
-            "a common wall-time target, not identical elapsed time. Full end-to-end "
+            "Measured trials with separately calibrated sampling-unit counts aimed "
+            "at a common wall-time target, not identical elapsed time. Shared-budget "
+            "scaling can materially reduce actual times below that target; each method "
+            "therefore reports median_time_as_fraction_of_target alongside the global "
+            "sampling_budget_scale_factor. Actual elapsed times are measured, not assumed. "
+            "Full end-to-end "
             "wall time includes reference quadrature, calibration, measured trials, "
             "and report assembly. Shared setup is reported separately and is not "
             "allocated to individual methods; per-method error-time ratios exclude "
