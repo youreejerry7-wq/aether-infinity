@@ -46,12 +46,13 @@ jobs:
           read -r code ttfb total bytes <<< "$metrics"
           echo "Follow-on GET /health: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
           test "$code" = 200
-          python3 - <<'PY'
+          python3 - "$RUNNER_TEMP/health.json" <<'PY'
           import json
           import re
+          import sys
           from pathlib import Path
 
-          health = json.loads(Path("$RUNNER_TEMP/health.json").read_text(encoding="utf-8"))
+          health = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
           assert health.get("status") == "ok"
           revision = health.get("revision")
           if revision is None:
