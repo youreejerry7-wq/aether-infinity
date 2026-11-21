@@ -15,7 +15,6 @@ const {
   SNAPSHOT_MISSING_RECHECK_MS,
   RETRY_MS,
   createController,
-  startBrowser,
   isUsableArchive
 } = require("../cdn-preview/app.js");
 
@@ -139,36 +138,13 @@ test("live preview skips the unpublished compact snapshot on first view", async 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [ARCHIVE_URL]);
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "canonical archive");
-});
 
-test("browser bootstrap avoids an unpublished compact snapshot request", async () => {
-  const payload = archive("canonical browser archive");
-  const calls = [];
-  const browserRoot = {
-    document: makeDocument(),
-    fetch: async (url, options) => {
-      calls.push({ url, options });
-      assert.equal(url, ARCHIVE_URL, "do not add a 404 request before the compact snapshot is published");
-      return { ok: true, status: 200, json: async () => payload };
-    },
-    setTimeout: () => 1,
-    clearTimeout: () => {},
-    AbortController: class {
-      constructor() { this.signal = {}; }
-      abort() {}
-    },
-    localStorage: makeMemoryStorage()
-  };
-
-  const started = startBrowser(browserRoot);
-  assert.ok(started, "browser bootstrap should return its controller");
-  assert.equal(await started.initialRefresh, true);
-  assert.deepEqual(calls.map((call) => call.url), [ARCHIVE_URL]);
-  assert.equal(calls[0].options.cache, "default");
-  assert.equal(
-    browserRoot.document.nodes.experiments.children[0].children[0].textContent,
-    "canonical browser archive"
-  );
+  // The browser bootstrap must keep the optional snapshot off until PR #2
+  // publishes data/research-latest.json on main; otherwise every fresh visitor
+  // pays for a guaranteed 404 before the full archive request.
+  const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
+  const browserBootstrap = source.slice(source.lastIndexOf("if (root.document"));
+  assert.doesNotMatch(browserBootstrap, /compactSnapshotEnabled\\s*:\\s*true/);
 });
 
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {
