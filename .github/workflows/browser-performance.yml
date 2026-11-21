@@ -46,7 +46,20 @@ jobs:
           read -r code ttfb total bytes <<< "$metrics"
           echo "Follow-on GET /health: HTTP=$code ttfb_seconds=$ttfb total_seconds=$total bytes=$bytes"
           test "$code" = 200
-          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "ok"' "$RUNNER_TEMP/health.json"
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          health = json.loads(Path("$RUNNER_TEMP/health.json").read_text(encoding="utf-8"))
+          assert health.get("status") == "ok"
+          revision = health.get("revision")
+          if revision is None:
+              print("Runtime revision unavailable: deployed app predates /health revision reporting.")
+          else:
+              assert isinstance(revision, str) and re.fullmatch(r"[0-9a-f]{40}", revision)
+              print(f"Render runtime revision: {revision}")
+          PY
       - name: Measure follow-up health, homepage, and archive
         shell: bash
         run: |
