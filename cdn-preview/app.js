@@ -268,9 +268,9 @@
       clearTimeoutImpl: browserRoot.clearTimeout.bind(browserRoot),
       AbortControllerImpl: browserRoot.AbortController,
       storage,
-      // The compact snapshot is the fast path once PR #2 publishes it.
-      // A bounded 404 fallback keeps this preview compatible before publication.
-      compactSnapshotEnabled: true
+      // Keep the compact request off until PR #2 publishes the snapshot on main;
+      // this avoids an extra 404 request on every fresh browser profile.
+      compactSnapshotEnabled: false
     });
     controller.bind();
     return { controller, initialRefresh: controller.refresh(false) };
