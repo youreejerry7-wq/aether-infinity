@@ -268,6 +268,11 @@ class SpeedLabTests(unittest.TestCase):
                     metrics["requested_sampling_units_per_replication"],
                 )
                 self.assertGreater(metrics["median_observed_seconds"], 0)
+                self.assertAlmostEqual(
+                    metrics["median_time_as_fraction_of_target"],
+                    metrics["median_observed_seconds"] / data["target_seconds_per_replication"],
+                )
+                self.assertGreater(metrics["median_time_as_fraction_of_target"], 0)
                 self.assertLessEqual(metrics["min_observed_seconds"],
                                      metrics["median_observed_seconds"])
                 self.assertLessEqual(metrics["median_observed_seconds"],
