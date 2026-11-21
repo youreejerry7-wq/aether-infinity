@@ -15,6 +15,7 @@ const {
   SNAPSHOT_MISSING_RECHECK_MS,
   RETRY_MS,
   createController,
+  startBrowser,
   isUsableArchive
 } = require("../cdn-preview/app.js");
 
@@ -138,6 +139,35 @@ test("live preview skips the unpublished compact snapshot on first view", async 
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [ARCHIVE_URL]);
   assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "canonical archive");
+});
+
+test("browser bootstrap enables the compact latest-snapshot fast path", async () => {
+  const payload = archive("compact browser snapshot").slice(0, 1);
+  const calls = [];
+  const browserRoot = {
+    document: makeDocument(),
+    fetch: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, status: 200, json: async () => payload };
+    },
+    setTimeout: () => 1,
+    clearTimeout: () => {},
+    AbortController: class {
+      constructor() { this.signal = {}; }
+      abort() {}
+    },
+    localStorage: makeMemoryStorage()
+  };
+
+  const started = startBrowser(browserRoot);
+  assert.ok(started, "browser bootstrap should return its controller");
+  assert.equal(await started.initialRefresh, true);
+  assert.deepEqual(calls.map((call) => call.url), [LATEST_URL]);
+  assert.equal(calls[0].options.cache, "default");
+  assert.equal(
+    browserRoot.document.nodes.experiments.children[0].children[0].textContent,
+    "compact browser snapshot"
+  );
 });
 
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {
