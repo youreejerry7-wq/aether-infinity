@@ -256,6 +256,26 @@
     return { bind, refresh };
   }
 
+  function startBrowser(browserRoot) {
+    if (!browserRoot.document || typeof browserRoot.fetch !== "function") return null;
+    let storage = null;
+    try { storage = browserRoot.localStorage; } catch (_) {}
+    const controller = createController({
+      document: browserRoot.document,
+      fetchImpl: browserRoot.fetch.bind(browserRoot),
+      now: function () { return Date.now(); },
+      setTimeoutImpl: browserRoot.setTimeout.bind(browserRoot),
+      clearTimeoutImpl: browserRoot.clearTimeout.bind(browserRoot),
+      AbortControllerImpl: browserRoot.AbortController,
+      storage,
+      // The compact snapshot is the fast path once PR #2 publishes it.
+      // A bounded 404 fallback keeps this preview compatible before publication.
+      compactSnapshotEnabled: true
+    });
+    controller.bind();
+    return { controller, initialRefresh: controller.refresh(false) };
+  }
+
   const api = {
     LATEST_URL,
     ARCHIVE_URL,
@@ -267,7 +287,8 @@
     SNAPSHOT_MISSING_KEY,
     SNAPSHOT_MISSING_RECHECK_MS,
     isUsableArchive,
-    createController
+    createController,
+    startBrowser
   };
 
   root.AetherCdnPreview = api;
@@ -276,18 +297,6 @@
   }
 
   if (root.document && typeof root.fetch === "function") {
-    let storage = null;
-    try { storage = root.localStorage; } catch (_) {}
-    const controller = createController({
-      document: root.document,
-      fetchImpl: root.fetch.bind(root),
-      now: function () { return Date.now(); },
-      setTimeoutImpl: root.setTimeout.bind(root),
-      clearTimeoutImpl: root.clearTimeout.bind(root),
-      AbortControllerImpl: root.AbortController,
-      storage
-    });
-    controller.bind();
-    void controller.refresh(false);
+    startBrowser(root);
   }
 })(globalThis);
