@@ -156,7 +156,7 @@ def _bootstrap_uncertainty(errors, durations, seed, resamples=BOOTSTRAP_RESAMPLE
         },
         "replicate_count_warning": (
             "30 or fewer replications; percentile intervals are exploratory."
-            if count < 30 else None
+            if count <= 30 else None
         ),
         "scope": (
             "Within-method replicate uncertainty only; does not include "
@@ -261,7 +261,7 @@ def _bootstrap_error_time_efficiency(
         },
         "replicate_count_warning": (
             "30 or fewer replications; percentile interval is exploratory."
-            if min(len(baseline_errors), len(candidate_errors)) < 30 else None
+            if min(len(baseline_errors), len(candidate_errors)) <= 30 else None
         ),
         "scope": (
             "Interval for baseline RMSE^2 times median duration divided by "
