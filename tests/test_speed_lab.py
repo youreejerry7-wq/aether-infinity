@@ -625,6 +625,13 @@ class CrossMethodEfficiencyBootstrapTests(unittest.TestCase):
         )
         self.assertIsNone(above_boundary["replicate_count_warning"])
 
+        above_boundary_between = _bootstrap_error_time_efficiency(
+            errors + [0.25], durations + [0.01],
+            [error / 2 for error in errors] + [0.125], durations + [0.01],
+            seed=34, resamples=100, paired=True,
+        )
+        self.assertIsNone(above_boundary_between["replicate_count_warning"])
+
     def test_zero_candidate_error_marks_ratio_interval_undefined(self):
         result = _bootstrap_error_time_efficiency(
             [1.0, -1.0, 1.0, -1.0], [0.01] * 4,
