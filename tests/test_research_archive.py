@@ -55,6 +55,18 @@ class ResearchArchiveTests(unittest.TestCase):
     def test_latest_snapshot_is_exactly_the_archive_head(self):
         self.assertEqual(self.latest_records, [self.records[0]])
         self.assertEqual(len(self.latest_records), 1)
+        # Keep the static frontend's preferred response small, and guarantee
+        # a material payload reduction versus downloading the full history.
+        self.assertLessEqual(
+            LATEST.stat().st_size,
+            2048,
+            "latest-cycle snapshot should remain at or below 2 KiB",
+        )
+        self.assertLessEqual(
+            LATEST.stat().st_size * 10,
+            ARCHIVE.stat().st_size,
+            "latest-cycle snapshot should remain at least 90% smaller than the archive",
+        )
 
     def test_experiment_field_types(self):
         for index, cycle in enumerate(self.records):
@@ -69,7 +81,6 @@ class ResearchArchiveTests(unittest.TestCase):
                     self.assertNotIsInstance(item["trials"], bool)
                     self.assertGreater(item["trials"], 0)
                     self.assertIsInstance(item["flag"], bool)
-
 
     def test_research_only_commit_skips_render(self):
         """Keep the hourly synthetic archive update out of production deploys."""
