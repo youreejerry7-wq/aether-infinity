@@ -605,6 +605,26 @@ class CrossMethodEfficiencyBootstrapTests(unittest.TestCase):
         self.assertEqual(result["efficiency_ratio"], {"lower": 8.0, "upper": 8.0})
         self.assertEqual(result["valid_resamples"], 200)
 
+    def test_30_replications_are_still_marked_exploratory_at_boundary(self):
+        errors = [1.0 if index % 2 == 0 else -1.0 for index in range(30)]
+        durations = [0.01 + index * 0.00001 for index in range(30)]
+
+        within = _bootstrap_uncertainty(
+            errors, durations, seed=31, resamples=100
+        )
+        between = _bootstrap_error_time_efficiency(
+            errors, durations,
+            [error / 2 for error in errors], durations,
+            seed=32, resamples=100, paired=True,
+        )
+        self.assertIn("30 or fewer replications", within["replicate_count_warning"])
+        self.assertIn("30 or fewer replications", between["replicate_count_warning"])
+
+        above_boundary = _bootstrap_uncertainty(
+            errors + [0.25], durations + [0.01], seed=33, resamples=100
+        )
+        self.assertIsNone(above_boundary["replicate_count_warning"])
+
     def test_zero_candidate_error_marks_ratio_interval_undefined(self):
         result = _bootstrap_error_time_efficiency(
             [1.0, -1.0, 1.0, -1.0], [0.01] * 4,
