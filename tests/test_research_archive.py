@@ -72,11 +72,16 @@ class ResearchArchiveTests(unittest.TestCase):
 
 
     def test_research_only_commit_skips_render(self):
-        """Synthetic archive updates should not trigger production rebuilds."""
+        """Keep the hourly synthetic archive update out of production deploys."""
         workflow = (ARCHIVE.parents[1] / ".github" / "workflows" / "research.yml")
         content = workflow.read_text(encoding="utf-8")
+        self.assertIn("cron: '17 * * * *'", content)
         self.assertIn(
             'git add data/research.json data/research-latest.json',
+            content,
+        )
+        self.assertIn(
+            'git commit -m "Record scheduled research cycle [skip render]"',
             content,
         )
 
