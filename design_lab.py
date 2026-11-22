@@ -98,6 +98,13 @@ def continuous_training_optimum(sheets):
     sum_dimensions = statistics.fmean(w + h for w, h in sheets)
     area = statistics.fmean(w * h for w, h in sheets)
     discriminant = sum_dimensions ** 2 - 3 * area
+    # A zero (or numerically indistinguishable) discriminant is a repeated
+    # stationary root, not a local maximum. Negative values have no real root.
+    discriminant_tolerance = 1e-12 * max(1.0, sum_dimensions ** 2, 3 * area)
+    if discriminant <= discriminant_tolerance:
+        raise ValueError(
+            "Mean volume has no numerically distinct real stationary maximum"
+        )
     optimum = (sum_dimensions - math.sqrt(discriminant)) / 6
     if not 0 < optimum < min(min(w, h) for w, h in sheets) / 2:
         raise ValueError("Continuous optimum outside common feasible range")
