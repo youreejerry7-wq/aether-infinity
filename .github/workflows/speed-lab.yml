@@ -25,9 +25,9 @@ jobs:
       - name: Show reproducible benchmark
         run: python speed_lab.py --samples 10000 --replicates 30 --seed 2026
 
-      # Use the CLI's maximum bounded 30 replications so the percentile intervals
-      # are not in the explicitly exploratory <30 regime. This remains a single-
-      # runner estimate; it does not capture cross-machine uncertainty.
+      # The matched-time CLI caps at 30 replications. At that cap the
+      # percentile-bootstrap intervals remain explicitly exploratory; 30 is
+      # not a guarantee of nominal 95% coverage. This is a single-runner estimate.
       # Request a 5 ms target. Faster runners may proportionally scale the
       # per-method counts to respect the shared cap; the report must expose the
       # scale and actual timings. Validate the hard budget, not a machine-specific
