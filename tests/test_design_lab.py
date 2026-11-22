@@ -195,6 +195,21 @@ class BoxDesignLabTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     lab.continuous_training_optimum(sheets)
 
+    def test_analytic_reference_rejects_degenerate_or_absent_stationary_maximum(self):
+        # Four small sheets plus one larger sheet produce a repeated stationary
+        # root near x=0.469, inside the common feasible interval (0, 0.5).
+        # That root is not a local maximum; the volume is monotone increasing.
+        large = (16 + 10 * math.sqrt(3)) / 11
+        degenerate = ((1.0, 1.0),) * 4 + ((large, large),)
+        no_real_roots = ((1.0, 1.0), (10.0, 10.0))
+
+        for sheets in (degenerate, no_real_roots):
+            with self.subTest(sheets=sheets):
+                with self.assertRaisesRegex(
+                    ValueError, "no numerically distinct real stationary maximum"
+                ):
+                    lab.continuous_training_optimum(sheets)
+
     def test_evaluate_rejects_boolean_and_non_numeric_geometry(self):
         for cut, holdout in (
             (True, lab.HOLDOUT_SHEETS),
