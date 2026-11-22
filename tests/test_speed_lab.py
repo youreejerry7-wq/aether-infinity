@@ -15,6 +15,7 @@ from speed_lab import (
     _bootstrap_uncertainty,
     _bootstrap_error_time_efficiency,
     antithetic_1d,
+    antithetic_unit_variance_midpoint,
     benchmark,
     benchmark_matched_time,
     circle_hits,
@@ -656,6 +657,18 @@ class CrossMethodEfficiencyBootstrapTests(unittest.TestCase):
         for args in invalid_cases:
             with self.subTest(args=args), self.assertRaises(ValueError):
                 _bootstrap_error_time_efficiency(*args)
+
+
+class AntitheticVarianceQuadratureTests(unittest.TestCase):
+    def test_variance_quadrature_is_stable_when_grid_is_doubled(self):
+        coarse = antithetic_unit_variance_midpoint(16_384)
+        fine = antithetic_unit_variance_midpoint(32_768)
+        self.assertGreater(coarse, 0.0)
+        self.assertGreater(fine, 0.0)
+        # The fixed 16,384-point reference changes by less than 5e-7
+        # when the midpoint grid is doubled; this is below the reported
+        # bootstrap uncertainty scale, but the value remains an approximation.
+        self.assertLess(abs(coarse - fine), 5e-7)
 
 
 if __name__ == "__main__":
