@@ -155,7 +155,7 @@ def _bootstrap_uncertainty(errors, durations, seed, resamples=BOOTSTRAP_RESAMPLE
             "upper": _percentile_interval(error_time_values, upper_quantile),
         },
         "replicate_count_warning": (
-            "Fewer than 30 replications; percentile intervals are exploratory."
+            "30 or fewer replications; percentile intervals are exploratory."
             if count < 30 else None
         ),
         "scope": (
@@ -260,7 +260,7 @@ def _bootstrap_error_time_efficiency(
             "candidate": len(candidate_errors),
         },
         "replicate_count_warning": (
-            "Fewer than 30 replications; percentile interval is exploratory."
+            "30 or fewer replications; percentile interval is exploratory."
             if min(len(baseline_errors), len(candidate_errors)) < 30 else None
         ),
         "scope": (
@@ -410,7 +410,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
         "replications": replicates,
         "seed": seed,
         "execution_order_by_replication": execution_order,
-        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method reports a paired-within-method 95% percentile-bootstrap interval for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios also have a paired percentile-bootstrap interval, resampling shared per-replication indices because fixed-sample methods use the same RNG seed within each replication. These intervals are exploratory below 30 replications and do not capture cross-machine uncertainty.",
+        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method reports a paired-within-method 95% percentile-bootstrap interval for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios also have a paired percentile-bootstrap interval, resampling shared per-replication indices because fixed-sample methods use the same RNG seed within each replication. These intervals are exploratory at 30 or fewer replications and do not capture cross-machine uncertainty.",
         "results": results,
     }
 
@@ -678,7 +678,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "observed RMSE is seed-specific. Matched-time reports include observed RMSE^2*time "
             "and model-based SE^2*time efficiency ratios versus the hit-or-miss baseline. "
             "Calibration and measured trials are deterministically shuffled across methods to reduce fixed-order timing bias. "
-            "Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios include a 95% percentile-bootstrap interval, independently resampling each method because matched-time trials use method-specific RNG streams; intervals are exploratory below 30 replications and do not capture cross-machine uncertainty. No quantum, hardware-independent, or universal speed claim."
+            "Each method also reports a paired-within-method 95% percentile-bootstrap interval across replications for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios include a 95% percentile-bootstrap interval, independently resampling each method because matched-time trials use method-specific RNG streams; intervals are exploratory at 30 or fewer replications and do not capture cross-machine uncertainty. No quantum, hardware-independent, or universal speed claim."
         ),
         "target_seconds_per_replication": budget_seconds,
         "replications": replicates,
