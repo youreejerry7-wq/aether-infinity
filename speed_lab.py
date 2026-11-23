@@ -279,6 +279,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
     Comparisons use equal sampling-unit counts, not equal CPU work.
     This is a diagnostic benchmark, not proof of universal speedups.
     """
+    benchmark_start = time.perf_counter()
     if isinstance(samples, bool) or not isinstance(samples, int) or samples < 1:
         raise ValueError("samples must be a positive integer")
     if isinstance(replicates, bool) or not isinstance(replicates, int) or replicates < 2:
@@ -308,6 +309,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
     order_rng = random.Random(seed ^ 0x5EED5EED)
     # Interleave methods in a deterministic shuffled order per replication.
     # Each method keeps the same per-replication RNG seed as before.
+    measured_trials_wall_start = time.perf_counter()
     for i in range(replicates):
         names = list(METHODS)
         order_rng.shuffle(names)
@@ -320,6 +322,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             elapsed = time.perf_counter() - start
             trial_data[name]["estimates"].append(estimate)
             trial_data[name]["durations"].append(elapsed)
+    measured_trials_wall_seconds = time.perf_counter() - measured_trials_wall_start
 
     for name, data in trial_data.items():
         estimates = data["estimates"]
@@ -396,7 +399,7 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             )
         )
 
-    return {
+    report = {
         "environment": benchmark_environment(),
         "variance_reference_setup": {
             "method": "deterministic_midpoint_quadrature",
@@ -405,14 +408,19 @@ def benchmark(samples=10_000, replicates=24, seed=2026):
             "included_in_per_method_trial_times": False,
         },
         "reference": "pi",
+        "end_to_end_wall_seconds": None,
+        "shared_setup_wall_seconds": variance_reference_setup_seconds,
+        "measured_trials_wall_seconds": measured_trials_wall_seconds,
         "target_value": math.pi,
         "samples_per_replication": samples,
         "replications": replicates,
         "seed": seed,
         "execution_order_by_replication": execution_order,
-        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method reports a paired-within-method 95% percentile-bootstrap interval for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios also have a paired percentile-bootstrap interval, resampling shared per-replication indices because fixed-sample methods use the same RNG seed within each replication. These intervals are exploratory at 30 or fewer replications and do not capture cross-machine uncertainty.",
+        "methodology": "Equal independent sampling units, not equal computation; methods are deterministically shuffled and interleaved per replication to reduce fixed-order timing bias. End-to-end wall time includes input validation, variance-reference setup, measured replications, bootstrap calculations, and report-object assembly; it excludes JSON serialization and console output. Measured-trial wall time includes replication scheduling and RNG construction, while per-method durations time only estimator calls. SE is analytic for hit-or-miss and conditional estimators, and a deterministic 16384-point midpoint quadrature approximation for antithetic pairs (two integrand evaluations per unit). Projected equal-wall-time SE and theoretical error-time efficiency use measured median duration per unit and assume linear scaling; they are not measured equal-time trials. Observed RMSE^2 times median wall-time is seed- and machine-specific, not a quantum-speed claim. Each method reports a paired-within-method 95% percentile-bootstrap interval for RMSE and RMSE^2 times median duration. Cross-method observed efficiency ratios also have a paired percentile-bootstrap interval, resampling shared per-replication indices because fixed-sample methods use the same RNG seed within each replication. These intervals are exploratory at 30 or fewer replications and do not capture cross-machine uncertainty.",
         "results": results,
     }
+    report["end_to_end_wall_seconds"] = time.perf_counter() - benchmark_start
+    return report
 
 
 
