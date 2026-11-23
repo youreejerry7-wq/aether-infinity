@@ -202,6 +202,20 @@ class SpeedLabTests(unittest.TestCase):
                 )
 
 
+    def test_fixed_sample_report_includes_end_to_end_wall_time(self):
+        report = benchmark(samples=200, replicates=2, seed=19)
+
+        self.assertGreater(report["end_to_end_wall_seconds"], 0)
+        self.assertGreater(report["measured_trials_wall_seconds"], 0)
+        self.assertEqual(
+            report["shared_setup_wall_seconds"],
+            report["variance_reference_setup"]["elapsed_seconds"],
+        )
+        self.assertGreaterEqual(
+            report["end_to_end_wall_seconds"],
+            report["shared_setup_wall_seconds"] + report["measured_trials_wall_seconds"],
+        )
+
     def test_matched_time_trials_are_bounded_and_labeled(self):
         data = benchmark_matched_time(budget_seconds=0.005, replicates=2, seed=31)
         self.assertEqual(data["replications"], 2)
