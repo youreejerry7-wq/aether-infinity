@@ -49,6 +49,18 @@ jobs:
         run: node --test tests/test_cdn_preview.cjs
       - name: Test compressed and identity HTTP body decoding
         run: python -m unittest discover -s tests -p 'test_measure_public_latency.py'
+      - name: Verify CORS wildcard matcher rejects non-wildcard origins
+        shell: bash
+        run: |
+          set -euo pipefail
+          pattern='^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)'
+          printf 'access-control-allow-origin: *\n' | grep -Eiq "$pattern"
+          if printf 'access-control-allow-origin: https://example.com\n' | grep -Eiq "$pattern"; then
+            echo "::error::CORS matcher accepted a non-wildcard origin."
+            exit 1
+          fi
+          echo "PASS: CORS matcher distinguishes the expected wildcard origin."
+
       - name: Verify the public archive supports browser cross-origin reads
         shell: bash
         run: |
@@ -62,7 +74,7 @@ jobs:
           # The frontend uses cache: "default"; require a positive origin cache lifetime.
           grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/archive.headers"
           grep -Ei '^cache-control:|^etag:' "$RUNNER_TEMP/archive.headers"
-          grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
+          grep -Eiq '^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)' "$RUNNER_TEMP/archive.headers"
           python - "$RUNNER_TEMP/research.json" <<'PY'
           import json
           import sys
@@ -97,7 +109,7 @@ jobs:
           if [ "$latest_code" = "200" ]; then
             grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/latest.headers"
             # Browser fetches this cross-origin URL; cache headers alone do not prove CORS access.
-            grep -Eiq '^access-control-allow-origin:[[:space:]]*\\*([[:space:]]|$)' "$RUNNER_TEMP/latest.headers"
+            grep -Eiq '^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)' "$RUNNER_TEMP/latest.headers"
           elif [ "$latest_code" = "404" ]; then
             echo "Compact snapshot is not published on main yet; deriving the expected one-record snapshot from the current archive for the size-budget test."
             python - "$RUNNER_TEMP/research.json" "$RUNNER_TEMP/research-latest.json" <<'PY'
