@@ -610,6 +610,48 @@ test("static preview keeps its dependency surface small and same-origin", () => 
 });
 
 
+test("a compact-snapshot network failure falls back to the full archive", async () => {
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) throw new Error("temporary network failure");
+    return { ok: true, status: 200, json: async () => archive("network fallback") };
+  }, 1000, null, true);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
+  assert.equal(
+    h.document.nodes.experiments.children[0].children[0].textContent,
+    "network fallback"
+  );
+});
+
+test("a compact-snapshot 5xx falls back and retries the snapshot on the next refresh", async () => {
+  let snapshotAttempts = 0;
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) {
+      snapshotAttempts += 1;
+      if (snapshotAttempts === 1) return { ok: false, status: 503 };
+      return { ok: true, status: 200, json: async () => archive("recovered compact snapshot").slice(0, 1) };
+    }
+    return { ok: true, status: 200, json: async () => archive("full archive fallback") };
+  }, 1000, null, true);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(
+    h.document.nodes.experiments.children[0].children[0].textContent,
+    "full archive fallback"
+  );
+  assert.equal(snapshotAttempts, 1);
+
+  h.advance(REFRESH_MS);
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(snapshotAttempts, 2);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL, LATEST_URL]);
+  assert.equal(
+    h.document.nodes.experiments.children[0].children[0].textContent,
+    "recovered compact snapshot"
+  );
+});
+
 test("default controller skips the unpublished compact snapshot", async () => {
   const document = makeDocument();
   const calls = [];
