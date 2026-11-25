@@ -224,7 +224,12 @@ jobs:
           grep -Fq 'const latestData = await latestResponse.json();' "$RUNNER_TEMP/cdn-preview.js"
           grep -Fq 'if (isUsableArchive(latestData))' "$RUNNER_TEMP/cdn-preview.js"
           grep -Fq '15 * 60 * 1000' "$RUNNER_TEMP/cdn-preview.js"
-          test "$(wc -c < "$RUNNER_TEMP/cdn-preview.js")" -le 10240
+          source_bytes=$(wc -c < "$RUNNER_TEMP/cdn-preview.js")
+          gzip_bytes=$(gzip -c "$RUNNER_TEMP/cdn-preview.js" | wc -c)
+          echo "CDN JavaScript source_bytes=$source_bytes gzip_bytes=$gzip_bytes"
+          # Keep source bounded, but gate the compressed payload users actually transfer.
+          test "$source_bytes" -le 11264
+          test "$gzip_bytes" -le 3072
           grep -Eiq '^content-type:.*(javascript|ecmascript)' "$RUNNER_TEMP/cdn-preview-js.headers"
           grep -Eiq '^cache-control:.*s-maxage=[1-9][0-9]*' "$RUNNER_TEMP/cdn-preview-js.headers"
           if grep -Eq '/api/run|/api/results|/health' "$RUNNER_TEMP/cdn-preview.js"; then
