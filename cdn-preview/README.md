@@ -55,6 +55,6 @@ These are point observations, not a controlled cold-start or global CDN benchmar
 
 ## Current archive fetch mode (isolated staging only)
 
-The preview now targets the canonical `main/data/research-latest.json` URL. At the current base revision this file is not yet published on `main` (HTTP 404), so the browser safely falls back to the full public archive. Once dashboard PR #2 is reviewed and merged, the same URL will begin returning the one-record snapshot automatically; no pinned review-branch dependency or frontend code change will be needed. CI verifies both the 404 fallback and, when available, that the compact snapshot exactly matches the newest full-archive record and is at least 80% smaller.
+The preview targets the canonical `main/data/research-latest.json` URL. Until dashboard PR #2 publishes that file on `main`, the request may return 404 and the browser safely falls back to the full public archive. After publication, the same URL automatically serves the one-record snapshot; no pinned review-branch dependency or frontend code change is needed. CI verifies both the 404 fallback and, when available, that the compact snapshot exactly matches the newest full-archive record and is at least 80% smaller.
 
 The preview remains a separate read-only staging site. No production domain, Flask route, database, payment flow, or Render production service is changed.

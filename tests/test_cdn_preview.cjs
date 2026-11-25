@@ -132,7 +132,7 @@ test("archive validation rejects empty, malformed, and undated data", () => {
 test("staging preview prefers main's compact snapshot when published", async () => {
   const payload = archive("current compact snapshot").slice(0, 1);
   const h = makeHarness(async (url) => {
-    assert.equal(url, LATEST_URL, "staging should fetch the compact review snapshot first");
+    assert.equal(url, LATEST_URL, "staging should fetch the canonical main snapshot first");
     return { ok: true, status: 200, json: async () => payload };
   }, 1000, null, true);
 
