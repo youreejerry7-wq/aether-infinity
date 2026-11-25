@@ -129,22 +129,29 @@ test("archive validation rejects empty, malformed, and undated data", () => {
   assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", interpretation: "Missing experiments" }]), false);
 });
 
-test("live preview skips the unpublished compact snapshot on first view", async () => {
+test("staging preview prefers PR #2's compact review snapshot on first view", async () => {
+  const payload = archive("current compact snapshot").slice(0, 1);
   const h = makeHarness(async (url) => {
-    assert.equal(url, ARCHIVE_URL, "live preview should request only the published canonical archive");
-    return { ok: true, json: async () => archive("canonical archive") };
-  });
+    assert.equal(url, LATEST_URL, "staging should fetch the compact review snapshot first");
+    return { ok: true, status: 200, json: async () => payload };
+  }, 1000, null, true);
 
+  assert.match(
+    LATEST_URL,
+    /\/jules-12948179582805029839-43dc1e9e\/data\/research-latest\.json$/
+  );
   assert.equal(await h.controller.refresh(false), true);
-  assert.deepEqual(h.calls.map((call) => call.url), [ARCHIVE_URL]);
-  assert.equal(h.document.nodes.experiments.children[0].children[0].textContent, "canonical archive");
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
+  assert.equal(
+    h.document.nodes.experiments.children[0].children[0].textContent,
+    "current compact snapshot"
+  );
 
-  // The browser bootstrap must keep the optional snapshot off until PR #2
-  // publishes data/research-latest.json on main; otherwise every fresh visitor
-  // pays for a guaranteed 404 before the full archive request.
+  // The isolated preview intentionally consumes PR #2's public review artifact
+  // until that PR is merged and the snapshot becomes available on main.
   const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
   const browserBootstrap = source.slice(source.lastIndexOf("if (root.document"));
-  assert.doesNotMatch(browserBootstrap, /compactSnapshotEnabled\s*:\s*true/);
+  assert.match(browserBootstrap, /compactSnapshotEnabled\s*:\s*true/);
 });
 
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {

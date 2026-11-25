@@ -26,7 +26,7 @@ After this pull request is reviewed, a separate free Render Static Site can be e
 
 Do not create, replace, or redirect the production web service as part of this PR. First deploy a separate preview site, verify its own URL and browser behavior, and compare its first-load and repeat-load latency against the existing Flask homepage. Only consider a production-domain change after explicit owner review.
 
-The static page itself is served from Render's static-site CDN. Its compact snapshot and fallback archive come from GitHub's public raw-content endpoint, so freshness and GitHub availability remain external dependencies. The scheduled workflow keeps the compact snapshot equal to the newest full-archive record; until that file is published on main, the frontend falls back to the full archive. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
+The static page itself is served from Render's static-site CDN. For this isolated staging preview, the compact snapshot is temporarily read from the public review branch for dashboard PR #2, while the fallback archive is read from `main`. The PR #13 CI fetches both and requires the one-record snapshot to exactly equal the newest record in the current full archive. This temporary cross-PR URL must be switched to `main` after PR #2 is owner-reviewed and merged. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
 
 ## Local checks
 
@@ -53,6 +53,8 @@ Two GitHub-hosted runner observations on 2026-11-13 returned HTTP 200:
 
 These are point observations, not a controlled cold-start or global CDN benchmark. The archive remains a public GitHub Raw dependency. The Flask service and production domain remain unchanged.
 
-## Current archive fetch mode
+## Current archive fetch mode (isolated staging only)
 
-The compact `research-latest.json` endpoint is not published on `main` yet (currently HTTP 404). Until it exists, the browser uses only the canonical `research.json` archive; the compact-snapshot path remains an explicit opt-in for tests and later reviewed activation. After the snapshot is published and verified on `main`, enable that path and rerun the browser/size gates.
+The preview now reads the one-record `data/research-latest.json` snapshot from dashboard PR #2's review branch (`jules-12948179582805029839-43dc1e9e`) because the compact file is not yet published on `main`. The current snapshot is **1,002 bytes** and CI verifies it exactly matches the newest record in the **99,964-byte** main archive. That is about a **99% smaller data response** for the staged preview. The full main archive remains a fallback if the compact request is missing, invalid, or temporarily unavailable.
+
+This review-branch URL is temporary and must not be treated as the production source. After PR #2 is owner-reviewed and merged, switch `LATEST_URL` and the CI URL to `main/data/research-latest.json`, then rerun the static-site and browser checks before considering any production release.

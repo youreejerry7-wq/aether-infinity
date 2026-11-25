@@ -102,7 +102,7 @@ async function main() {
     assert.deepEqual(flaskOrApiRequests, [], "the static preview must not wake or call the Flask service");
     assert.ok(
       rawArchiveResponses.some((response) => response.status === 200),
-      "at least one canonical public archive response must succeed"
+      "at least one public compact-snapshot or canonical-archive response must succeed"
     );
     // Generous CI guardrails for the isolated static CDN preview, not a global SLA.
     assert.ok(pageMetrics.navigationTtfbMs > 0 && pageMetrics.navigationTtfbMs <= 3000,
