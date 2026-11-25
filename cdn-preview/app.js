@@ -162,7 +162,13 @@
     async function fetchArchive(cache, signal) {
       const init = { cache, signal };
       if (options.compactSnapshotEnabled === true && (cache === "reload" || now() >= snapshotMissingUntil)) {
-        const latestResponse = await fetchImpl(LATEST_URL, init);
+        let latestResponse = null;
+        try {
+          latestResponse = await fetchImpl(LATEST_URL, init);
+        } catch (_) {
+          // A transient network error should not prevent the full archive fallback.
+          if (signal && signal.aborted) throw new Error("archive_unavailable");
+        }
         if (latestResponse && latestResponse.ok) {
           try {
             const latestData = await latestResponse.json();
@@ -171,10 +177,11 @@
               return latestData;
             }
           } catch (_) {}
-        } else if (!latestResponse || latestResponse.status !== 404) {
-          throw new Error("archive_unavailable");
+          rememberMissingSnapshot();
+        } else if (latestResponse && latestResponse.status === 404) {
+          rememberMissingSnapshot();
         }
-        rememberMissingSnapshot();
+        // Transient network/5xx failures fall through without negative-caching.
       }
 
       const archiveResponse = await fetchImpl(ARCHIVE_URL, init);
