@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json"
+          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json"
           latest_metrics=$(curl -sS -L --connect-timeout 5 --max-time 15 \
             --dump-header "$RUNNER_TEMP/latest.headers" \
             --output "$RUNNER_TEMP/research-latest.json" \
@@ -110,27 +110,7 @@ jobs:
             grep -Eiq '^cache-control:.*max-age=[1-9][0-9]*' "$RUNNER_TEMP/latest.headers"
             # Browser fetches this cross-origin URL; cache headers alone do not prove CORS access.
             grep -Eiq '^access-control-allow-origin:[[:space:]]*\*([[:space:]]|$)' "$RUNNER_TEMP/latest.headers"
-          elif [ "$latest_code" = "404" ]; then
-            echo "::error::The PR #2 review snapshot is missing from its expected public branch URL."
-            exit 1
-          else
-            echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
-            exit 1
-          fi
-
-          # The isolated preview temporarily consumes PR #2's review-branch snapshot.
-          # After PR #2 merges, switch this URL and the browser URL to main.
-          if [ "$latest_code" = "200" ]; then
-            if ! grep -Eq 'compactSnapshotEnabled:[[:space:]]*true' cdn-preview/app.js; then
-              echo "::error::The compact snapshot is published on main but the browser bootstrap has not enabled it."
-              exit 1
-            fi
-          elif grep -Eq 'compactSnapshotEnabled:[[:space:]]*true' cdn-preview/app.js; then
-            echo "::error::The compact snapshot is not published on main; keep the full-archive fallback active."
-            exit 1
-          fi
-
-          python - "$RUNNER_TEMP/research.json" "$RUNNER_TEMP/research-latest.json" <<'PY'
+            python - "$RUNNER_TEMP/research.json" "$RUNNER_TEMP/research-latest.json" <<'PY'
           import json
           import sys
           from pathlib import Path
@@ -148,6 +128,21 @@ jobs:
           )
           print(f"Compact snapshot: {latest_bytes} bytes vs {archive_bytes} full-archive bytes ({reduction:.1f}% smaller; 80% minimum)")
           PY
+          elif [ "$latest_code" = "404" ]; then
+            echo "::notice::The main snapshot is not published yet; the browser smoke will verify the full-archive fallback."
+          else
+            echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
+            exit 1
+          fi
+
+          if ! grep -Fq 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' cdn-preview/app.js; then
+            echo "::error::The preview must use the canonical main-branch snapshot URL."
+            exit 1
+          fi
+          if ! grep -Eq 'compactSnapshotEnabled:[[:space:]]*true' cdn-preview/app.js; then
+            echo "::error::The compact-snapshot loader must remain enabled so it activates after publication."
+            exit 1
+          fi
 
       - name: Measure first and repeat AETHER latency and payloads (read-only)
         run: python3 tests/measure_public_latency.py

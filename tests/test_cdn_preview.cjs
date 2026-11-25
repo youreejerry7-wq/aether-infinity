@@ -129,7 +129,7 @@ test("archive validation rejects empty, malformed, and undated data", () => {
   assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", interpretation: "Missing experiments" }]), false);
 });
 
-test("staging preview prefers PR #2's compact review snapshot on first view", async () => {
+test("staging preview prefers main's compact snapshot when published", async () => {
   const payload = archive("current compact snapshot").slice(0, 1);
   const h = makeHarness(async (url) => {
     assert.equal(url, LATEST_URL, "staging should fetch the compact review snapshot first");
@@ -138,7 +138,7 @@ test("staging preview prefers PR #2's compact review snapshot on first view", as
 
   assert.match(
     LATEST_URL,
-    /\/jules-12948179582805029839-43dc1e9e\/data\/research-latest\.json$/
+    /\/main\/data\/research-latest\.json$/
   );
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
@@ -147,8 +147,8 @@ test("staging preview prefers PR #2's compact review snapshot on first view", as
     "current compact snapshot"
   );
 
-  // The isolated preview intentionally consumes PR #2's public review artifact
-  // until that PR is merged and the snapshot becomes available on main.
+  // Always target main. Before PR #2 publishes the snapshot there, the separate
+  // fallback regression below verifies that the full archive remains usable.
   const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
   const browserBootstrap = source.slice(source.lastIndexOf("if (root.document"));
   assert.match(browserBootstrap, /compactSnapshotEnabled\s*:\s*true/);

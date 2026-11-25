@@ -97,24 +97,15 @@ async function main() {
     assert.match(summary || "", /(Latest archived cycle:|archived cycles · latest:)/);
     assert.equal(status, "Latest archive record loaded");
     assert.ok(renderedRows > 0, "the public archive should render at least one experiment row");
-    assert.ok(externalRequests.length <= 1, "the initial view should make only one published archive request");
+    assert.ok(
+      externalRequests.length <= 2,
+      "initial view may request one compact snapshot plus one full-archive fallback"
+    );
     assert.deepEqual(unexpectedExternal, [], "only the public GitHub Raw archive may be contacted");
     assert.deepEqual(flaskOrApiRequests, [], "the static preview must not wake or call the Flask service");
     assert.ok(
       rawArchiveResponses.some((response) => response.status === 200),
       "at least one public compact-snapshot or canonical-archive response must succeed"
-    );
-    assert.equal(
-      compactSnapshotLoaded,
-      true,
-      "the published compact snapshot must load; full-archive fallback is only for when it is unpublished"
-    );
-    const compactSnapshotResponse = compactSnapshotResponses.find(
-      (response) => response.status === 200
-    );
-    assert.ok(
-      compactSnapshotResponse.bodyBytes > 0 && compactSnapshotResponse.bodyBytes <= 2048,
-      "the browser must load a nonempty compact snapshot no larger than 2 KiB"
     );
     // Generous CI guardrails for the isolated static CDN preview, not a global SLA.
     assert.ok(pageMetrics.navigationTtfbMs > 0 && pageMetrics.navigationTtfbMs <= 3000,
@@ -123,10 +114,30 @@ async function main() {
       "DOMContentLoaded should stay within the 3-second preview budget");
     assert.ok(decodedResponseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
     if (compactSnapshotLoaded) {
+      const compactSnapshotResponse = compactSnapshotResponses.find(
+        (response) => response.status === 200
+      );
+      assert.ok(
+        compactSnapshotResponse.bodyBytes > 0 && compactSnapshotResponse.bodyBytes <= 2048,
+        "the browser must load a nonempty compact snapshot no larger than 2 KiB"
+      );
       assert.equal(externalRequests.length, 1,
         "a valid compact snapshot should require exactly one external archive request");
       assert.ok(decodedResponseBodyBytes <= 25000,
         "compact-snapshot initial HTML, JS, and data payload should stay below 25 KB");
+    } else {
+      assert.ok(
+        compactSnapshotResponses.some((response) => response.status === 404),
+        "an unpublished main snapshot must return 404 before the canonical fallback"
+      );
+      assert.ok(
+        rawArchiveResponses.some((response) =>
+          response.url.endsWith("/data/research.json") && response.status === 200
+        ),
+        "the canonical main archive must load when the compact snapshot is not yet published"
+      );
+      assert.equal(externalRequests.length, 2,
+        "the unpublished snapshot should cause exactly one bounded fallback request");
     }
     assert.ok(dataReadyMs <= 8000, "archive data should become visible within the 8-second preview budget");
 

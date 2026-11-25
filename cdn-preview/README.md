@@ -26,7 +26,7 @@ After this pull request is reviewed, a separate free Render Static Site can be e
 
 Do not create, replace, or redirect the production web service as part of this PR. First deploy a separate preview site, verify its own URL and browser behavior, and compare its first-load and repeat-load latency against the existing Flask homepage. Only consider a production-domain change after explicit owner review.
 
-The static page itself is served from Render's static-site CDN. For this isolated staging preview, the compact snapshot is temporarily read from the public review branch for dashboard PR #2, while the fallback archive is read from `main`. The PR #13 CI fetches both and requires the one-record snapshot to exactly equal the newest record in the current full archive. This temporary cross-PR URL must be switched to `main` after PR #2 is owner-reviewed and merged. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
+The static page itself is served from Render's static-site CDN. The preview always targets `main/data/research-latest.json`; until dashboard PR #2 publishes that file on `main`, the request returns 404 and the page falls back to the canonical full archive. CI verifies the fallback while the snapshot is absent, and verifies byte-for-byte equality with the full archive head when the snapshot is present. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
 
 ## Local checks
 
@@ -55,6 +55,6 @@ These are point observations, not a controlled cold-start or global CDN benchmar
 
 ## Current archive fetch mode (isolated staging only)
 
-The preview now reads the one-record `data/research-latest.json` snapshot from dashboard PR #2's review branch (`jules-12948179582805029839-43dc1e9e`) because the compact file is not yet published on `main`. The current snapshot is **1,002 bytes** and CI verifies it exactly matches the newest record in the **99,964-byte** main archive. That is about a **99% smaller data response** for the staged preview. The full main archive remains a fallback if the compact request is missing, invalid, or temporarily unavailable.
+The preview now targets the canonical `main/data/research-latest.json` URL. At the current base revision this file is not yet published on `main` (HTTP 404), so the browser safely falls back to the full public archive. Once dashboard PR #2 is reviewed and merged, the same URL will begin returning the one-record snapshot automatically; no pinned review-branch dependency or frontend code change will be needed. CI verifies both the 404 fallback and, when available, that the compact snapshot exactly matches the newest full-archive record and is at least 80% smaller.
 
-This review-branch URL is temporary and must not be treated as the production source. After PR #2 is owner-reviewed and merged, switch `LATEST_URL` and the CI URL to `main/data/research-latest.json`, then rerun the static-site and browser checks before considering any production release.
+The preview remains a separate read-only staging site. No production domain, Flask route, database, payment flow, or Render production service is changed.
