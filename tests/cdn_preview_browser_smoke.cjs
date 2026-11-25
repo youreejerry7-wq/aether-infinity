@@ -104,6 +104,18 @@ async function main() {
       rawArchiveResponses.some((response) => response.status === 200),
       "at least one public compact-snapshot or canonical-archive response must succeed"
     );
+    assert.equal(
+      compactSnapshotLoaded,
+      true,
+      "the published compact snapshot must load; full-archive fallback is only for when it is unpublished"
+    );
+    const compactSnapshotResponse = compactSnapshotResponses.find(
+      (response) => response.status === 200
+    );
+    assert.ok(
+      compactSnapshotResponse.bodyBytes > 0 && compactSnapshotResponse.bodyBytes <= 2048,
+      "the browser must load a nonempty compact snapshot no larger than 2 KiB"
+    );
     // Generous CI guardrails for the isolated static CDN preview, not a global SLA.
     assert.ok(pageMetrics.navigationTtfbMs > 0 && pageMetrics.navigationTtfbMs <= 3000,
       "static HTML TTFB should stay within the 3-second preview budget");
