@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json"
+          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json"
           latest_metrics=$(curl -sS -L --connect-timeout 5 --max-time 15 \
             --dump-header "$RUNNER_TEMP/latest.headers" \
             --output "$RUNNER_TEMP/research-latest.json" \
@@ -129,13 +129,13 @@ jobs:
           print(f"Compact snapshot: {latest_bytes} bytes vs {archive_bytes} full-archive bytes ({reduction:.1f}% smaller; 80% minimum)")
           PY
           elif [ "$latest_code" = "404" ]; then
-            echo "::notice::The main snapshot is not published yet; the browser smoke will verify the full-archive fallback."
+            echo "::error::PR #2 review snapshot is missing; update the staging URL before continuing."
           else
             echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
             exit 1
           fi
 
-          if ! grep -Fq 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' cdn-preview/app.js; then
+          if ! grep -Fq 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json' cdn-preview/app.js; then
             echo "::error::The preview must use the canonical main-branch snapshot URL."
             exit 1
           fi

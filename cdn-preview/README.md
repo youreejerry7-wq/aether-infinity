@@ -26,7 +26,7 @@ After this pull request is reviewed, a separate free Render Static Site can be e
 
 Do not create, replace, or redirect the production web service as part of this PR. First deploy a separate preview site, verify its own URL and browser behavior, and compare its first-load and repeat-load latency against the existing Flask homepage. Only consider a production-domain change after explicit owner review.
 
-The static page itself is served from Render's static-site CDN. The preview always targets `main/data/research-latest.json`; until dashboard PR #2 publishes that file on `main`, the request returns 404 and the page falls back to the canonical full archive. CI verifies the fallback while the snapshot is absent, and verifies byte-for-byte equality with the full archive head when the snapshot is present. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
+The static page itself is served from Render's static-site CDN. During staging, it targets PR #2's review-branch snapshot at `jules-12948179582805029839-43dc1e9e/data/research-latest.json`, which is refreshed alongside the canonical archive. The preview falls back to the full archive if the snapshot is missing or invalid. CI verifies the snapshot matches the newest archive record and enforces the compact-payload budget. After PR #2 is merged, switch the snapshot URL to `main/data/research-latest.json` and rerun the browser checks. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
 
 ## Local checks
 
@@ -55,6 +55,6 @@ These are point observations, not a controlled cold-start or global CDN benchmar
 
 ## Current archive fetch mode (isolated staging only)
 
-The preview targets the canonical `main/data/research-latest.json` URL. Until dashboard PR #2 publishes that file on `main`, the request may return 404 and the browser safely falls back to the full public archive. After publication, the same URL automatically serves the one-record snapshot; no pinned review-branch dependency or frontend code change is needed. CI verifies both the 404 fallback and, when available, that the compact snapshot exactly matches the newest full-archive record and is at least 80% smaller.
+The staging preview currently targets PR #2's review-branch snapshot (`jules-12948179582805029839-43dc1e9e`) so the compact payload can be tested before merge. The full-archive fallback remains covered by regression tests. After PR #2 merges, switch the URL to `main/data/research-latest.json` and remove the review-branch dependency. CI requires the compact snapshot to exactly match the newest full-archive record and be at least 80% smaller.
 
 The preview remains a separate read-only staging site. No production domain, Flask route, database, payment flow, or Render production service is changed.

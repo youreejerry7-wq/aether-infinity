@@ -2,6 +2,7 @@
   "use strict";
 
   // Staging-only: use PR #2's compact snapshot until that PR is merged to main.
+  // Staging-only: use PR #2's compact snapshot until that PR is merged to main.
   const LATEST_URL =
     "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json";
   const ARCHIVE_URL =
