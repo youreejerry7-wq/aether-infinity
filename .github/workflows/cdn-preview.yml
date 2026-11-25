@@ -124,6 +124,19 @@ jobs:
             echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
             exit 1
           fi
+
+          # Keep the browser feature flag in lockstep with main's publication state:
+          # avoid a guaranteed 404 while absent; require the compact path once published.
+          if [ "$latest_code" = "200" ]; then
+            if ! grep -Eq 'compactSnapshotEnabled:[[:space:]]*true' cdn-preview/app.js; then
+              echo "::error::The compact snapshot is published on main but the browser bootstrap has not enabled it."
+              exit 1
+            fi
+          elif grep -Eq 'compactSnapshotEnabled:[[:space:]]*true' cdn-preview/app.js; then
+            echo "::error::The compact snapshot is not published on main; keep the full-archive fallback active."
+            exit 1
+          fi
+
           python - "$RUNNER_TEMP/research.json" "$RUNNER_TEMP/research-latest.json" <<'PY'
           import json
           import sys
