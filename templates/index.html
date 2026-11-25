@@ -115,6 +115,8 @@ const archiveFullUrl = 'https://raw.githubusercontent.com/youreejerry7-wq/aether
 const archiveRefreshMs = 300000;
 const archiveRetryMs = 30000; // Retry failed or stale-fallback loads sooner, without retry storms.
 const archiveTimeoutMs = 15000;
+// A scheduled run is configured hourly, but GitHub may delay or drop scheduled events.
+const archiveStaleAfterMs = 90 * 60 * 1000;
 // Bound DOM work even if a malformed or oversized archive contains many records.
 const maxDisplayedArchiveErrors = 20;
 const maxDisplayedArchiveExperiments = 50;
@@ -224,6 +226,11 @@ async function loadAuto() {
   autoStatus.textContent = fromGitHub
     ? (fromGitHubSnapshot ? 'Latest available GitHub snapshot.' : 'Latest available GitHub archive.')
     : 'Showing deployed server archive snapshot (may be stale).';
+  const archiveAgeMs = Date.now() - Date.parse(data[0].time);
+  if (archiveAgeMs > archiveStaleAfterMs) {
+    const ageHours = Math.floor(archiveAgeMs / (60 * 60 * 1000));
+    autoStatus.textContent += ` Latest cycle is ${ageHours}h old; scheduled runs may be delayed.`;
+  }
   // A server snapshot is useful but may be old: retry the primary source after 30s.
   if (!fromGitHub) nextArchiveRequestAt = Date.now() + archiveRetryMs;
   autoSummary.style.display = 'grid';

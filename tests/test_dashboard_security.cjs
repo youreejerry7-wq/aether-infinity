@@ -450,6 +450,25 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(nodes.run.disabled, false);
   assert.equal(nodes.message.textContent, 'Experiment unavailable. Please try again.');
 
+  // A successful but overdue scheduled archive must be labeled stale, not fresh.
+  archive = [{
+    time: '2026-11-25T14:00:00Z',
+    status: 'completed',
+    errors: [],
+    experiments: [],
+  }];
+  snapshotArchiveOverride = [archive[0]];
+  failArchive = false;
+  failGitHub = false;
+  snapshotMissing = false;
+  hangGitHub = false;
+  hangArchiveBody = false;
+  clockMs = Date.parse('2026-11-25T17:36:00Z');
+  await context.loadAuto();
+  assert.ok(nodes['auto-status'].textContent.includes(
+    'Latest cycle is 3h old; scheduled runs may be delayed.'
+  ), 'The dashboard must disclose delayed scheduled data.');
+
   // Optional live integration check: feed the public archive through the same
   // dashboard loader used by the browser, not just a hand-written fixture.
   if (process.env.AETHER_ARCHIVE_PATH) {
