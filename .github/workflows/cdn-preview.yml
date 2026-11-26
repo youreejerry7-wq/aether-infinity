@@ -136,7 +136,7 @@ jobs:
           fi
 
           if ! grep -Fq 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json' cdn-preview/app.js; then
-            echo "::error::The preview must use the canonical main-branch snapshot URL."
+            echo "::error::The preview must use the pinned PR #2 review snapshot URL."
             exit 1
           fi
           if ! grep -Eq 'compactSnapshotEnabled:[[:space:]]*true' cdn-preview/app.js; then
@@ -195,7 +195,7 @@ jobs:
               -w '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$base/$asset_url" || true)
             read -r code ttfb total bytes <<< "${metrics:-}"
             echo "static_js attempt=$attempt HTTP=${code:-000} ttfb_seconds=${ttfb:-n/a} total_seconds=${total:-n/a} bytes=${bytes:-0}"
-            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js" && cmp --silent "$RUNNER_TEMP/cdn-preview.js" cdn-preview/app.js; then
+            if [ "${code:-}" = "200" ] && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js" && grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js" && cmp --silent "$RUNNER_TEMP/cdn-preview.js" cdn-preview/app.js; then
               js_match=1
               break
             fi
@@ -205,7 +205,7 @@ jobs:
           done
           test "$js_match" = "1"
           echo "static_js matches checked-out PR asset sha256=$(sha256sum cdn-preview/app.js | cut -d' ' -f1)"
-          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
+          grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json' "$RUNNER_TEMP/cdn-preview.js"
           grep -q 'aether.archive.preview.snapshot-missing-until.v1' "$RUNNER_TEMP/cdn-preview.js"
           # Catch a stale staging deploy that has not picked up the malformed-snapshot fallback.
