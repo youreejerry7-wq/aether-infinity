@@ -149,7 +149,7 @@ test("a stale compact snapshot is explicitly labeled in status and summary", asy
 
   assert.equal(await h.controller.refresh(false), true);
   assert.match(h.document.nodes.summary.textContent, /STALE$/);
-  assert.match(h.document.nodes.status.textContent, /Archive is stale \\(>90m\\); scheduled runs may be delayed/);
+  assert.match(h.document.nodes.status.textContent, /Archive is stale \(>90m\); scheduled runs may be delayed/);
 });
 
 test("staging preview prefers PR #2's review snapshot until it is merged", async () => {
