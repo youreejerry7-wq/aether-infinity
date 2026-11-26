@@ -702,3 +702,20 @@ test("default controller skips the unpublished compact snapshot", async () => {
     "default full archive"
   );
 });
+
+test("a cached stale archive is labeled before the refresh request", () => {
+  const payload = archive("cached stale archive").slice(0, 1);
+  const now = Date.parse(payload[0].time) + 2 * 60 * 60 * 1000;
+  const storage = makeMemoryStorage();
+  storage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  const h = makeHarness(async () => {
+    throw new Error("cached rendering must not need a network request");
+  }, now, storage, true);
+
+  assert.match(h.document.nodes.summary.textContent, /STALE$/);
+  assert.match(
+    h.document.nodes.status.textContent,
+    /Showing saved archive while checking for updates\. Archive is stale \(>90m\)/
+  );
+  assert.equal(h.calls.length, 0);
+});
