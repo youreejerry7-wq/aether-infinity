@@ -569,10 +569,17 @@ test("initial HTML stays lightweight and avoids third-party render-blocking asse
   assert.doesNotMatch(html, /<script\b[^>]*\bsrc=["']https?:\/\//i);
   const linkTags = html.split("<link").slice(1).map((part) => "<link" + part.slice(0, part.indexOf(">") + 1));
   const externalLinks = linkTags.filter((tag) => tag.includes('href="https://'));
-  assert.equal(externalLinks.length, 1, "only the archive host may be preconnected");
-  assert.ok(externalLinks[0].includes('rel="preconnect"'));
-  assert.ok(externalLinks[0].includes('href="https://raw.githubusercontent.com"'));
-  assert.ok(externalLinks[0].includes("crossorigin"));
+  const preconnects = linkTags.filter((tag) => /\brel=["']preconnect["']/i.test(tag));
+  const preloads = linkTags.filter((tag) => /\brel=["']preload["']/i.test(tag));
+  assert.equal(externalLinks.length, 2, "only the archive host may be preconnected or preloaded");
+  assert.equal(preconnects.length, 1);
+  assert.equal(preloads.length, 1);
+  assert.ok(preconnects[0].includes('href="https://raw.githubusercontent.com"'));
+  assert.ok(preconnects[0].includes("crossorigin"));
+  assert.ok(preloads[0].includes(`href="${LATEST_URL}"`));
+  assert.match(preloads[0], /\bas=["']fetch["']/i);
+  assert.match(preloads[0], /\bcrossorigin=["']anonymous["']/i);
+  assert.match(preloads[0], /\bfetchpriority=["']high["']/i);
   assert.doesNotMatch(html, /<iframe\b|<img\b/i);
   const policy = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/i);
   assert.ok(policy, "static preview must declare a restrictive Content Security Policy");
@@ -633,6 +640,8 @@ test("static preview keeps its dependency surface small and same-origin", () => 
   const stylesheetLinks = [...html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi)];
   const preconnects = [...html.matchAll(/<link\b[^>]*\brel=["']preconnect["'][^>]*>/gi)]
     .map((match) => match[0]);
+  const preloads = [...html.matchAll(/<link\b[^>]*\brel=["']preload["'][^>]*>/gi)]
+    .map((match) => match[0]);
 
   // Pin the script URL to its Git blob so CDN edges cannot serve a stale app.js after deploy.
   const script = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"));
@@ -645,6 +654,10 @@ test("static preview keeps its dependency surface small and same-origin", () => 
   assert.equal(stylesheetLinks.length, 0);
   assert.equal(preconnects.length, 1);
   assert.match(preconnects[0], /href=["']https:\/\/raw\.githubusercontent\.com["']/i);
+  assert.equal(preloads.length, 1);
+  assert.ok(preloads[0].includes(`href="${LATEST_URL}"`));
+  assert.match(preloads[0], /\bas=["']fetch["']/i);
+  assert.match(preloads[0], /\bcrossorigin=["']anonymous["']/i);
 
   // The only cross-origin network destination is the public read-only archive.
   assert.match(html, /Content-Security-Policy/);
