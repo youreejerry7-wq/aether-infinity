@@ -15,6 +15,7 @@
   const STORAGE_KEY = "aether.archive.preview.v2";
   const SNAPSHOT_MISSING_KEY = "aether.archive.preview.snapshot-missing-until.v1";
   const SNAPSHOT_MISSING_RECHECK_MS = 15 * 60 * 1000;
+  const STALE_AFTER_MS = 90 * 60 * 1000;
   function isUsableArchive(data) {
     const latest = Array.isArray(data) ? data[0] : null;
     return Boolean(
@@ -25,6 +26,16 @@
       !Number.isNaN(Date.parse(latest.time)) &&
       Array.isArray(latest.experiments)
     );
+  }
+
+  function getStaleAgeMinutes(data, nowMs = Date.now()) {
+    const latest = Array.isArray(data) ? data[0] : null;
+    const timestamp = latest && typeof latest.time === "string"
+      ? Date.parse(latest.time)
+      : NaN;
+    const ageMs = nowMs - timestamp;
+    if (!Number.isFinite(timestamp) || ageMs <= STALE_AFTER_MS) return null;
+    return Math.floor(ageMs / (60 * 1000));
   }
 
   function createController(options) {
@@ -61,14 +72,21 @@
     function render(data, statusMessage) {
       const latest = data[0];
       const timestamp = new Date(latest.time).toLocaleString();
+      const staleAgeMinutes = getStaleAgeMinutes(data, now());
+      const staleWarning = staleAgeMinutes === null
+        ? ""
+        : `Latest cycle is ${staleAgeMinutes} minutes old; scheduled runs may be delayed.`;
       const summary = doc.getElementById("summary");
       const body = doc.getElementById("experiments");
       const note = doc.getElementById("note");
 
-      summary.textContent = data.length > 1
+      const summaryText = data.length > 1
         ? data.length + " archived cycles · latest: " + timestamp
         : "Latest archived cycle: " + timestamp;
-      setStatus(statusMessage || "Latest archive record loaded");
+      summary.textContent = summaryText + (staleAgeMinutes === null ? "" : " · STALE");
+      setStatus([statusMessage || "Latest archive record loaded", staleWarning]
+        .filter(Boolean)
+        .join(". "));
       body.replaceChildren();
 
       const experiments = latest.experiments.slice(0, MAX_EXPERIMENTS);
@@ -275,7 +293,9 @@
     STORAGE_KEY,
     SNAPSHOT_MISSING_KEY,
     SNAPSHOT_MISSING_RECHECK_MS,
+    STALE_AFTER_MS,
     isUsableArchive,
+    getStaleAgeMinutes,
     createController
   };
 

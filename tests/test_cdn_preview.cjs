@@ -13,6 +13,8 @@ const {
   STORAGE_KEY,
   SNAPSHOT_MISSING_KEY,
   SNAPSHOT_MISSING_RECHECK_MS,
+  STALE_AFTER_MS,
+  getStaleAgeMinutes,
   RETRY_MS,
   createController,
   isUsableArchive
@@ -127,6 +129,31 @@ test("archive validation rejects empty, malformed, and undated data", () => {
     experiments: []
   }]), true);
   assert.equal(isUsableArchive([{ time: "2026-11-07T04:00:00Z", interpretation: "Missing experiments" }]), false);
+});
+
+test("archive freshness warning starts only after 90 minutes", () => {
+  const data = archive();
+  const timestamp = Date.parse(data[0].time);
+  assert.equal(getStaleAgeMinutes(data, timestamp + STALE_AFTER_MS), null);
+  assert.equal(getStaleAgeMinutes(data, timestamp + STALE_AFTER_MS + 60_000), 91);
+  assert.equal(getStaleAgeMinutes(data, timestamp + 2 * 60 * 60 * 1000), 120);
+  assert.equal(getStaleAgeMinutes([], timestamp + 2 * 60 * 60 * 1000), null);
+});
+
+test("a stale compact snapshot is explicitly labeled in status and summary", async () => {
+  const payload = archive("stale compact snapshot").slice(0, 1);
+  const now = Date.parse(payload[0].time) + 2 * 60 * 60 * 1000;
+  const h = makeHarness(async (url) => {
+    assert.equal(url, LATEST_URL);
+    return { ok: true, status: 200, json: async () => payload };
+  }, now, null, true);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.match(h.document.nodes.summary.textContent, /STALE$/);
+  assert.match(
+    h.document.nodes.status.textContent,
+    /Latest cycle is 120 minutes old; scheduled runs may be delayed/
+  );
 });
 
 test("staging preview prefers PR #2's review snapshot until it is merged", async () => {
