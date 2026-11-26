@@ -41,7 +41,11 @@ async function main() {
     assert.equal(navigation.status(), 200, "static preview HTML should return HTTP 200");
 
     await page.waitForFunction(
-      () => document.querySelector("#status")?.textContent === "Latest archive record loaded",
+      () => {
+        const status = document.querySelector("#status")?.textContent || "";
+        return status === "Latest archive record loaded" ||
+          status.startsWith("Latest archive record loaded. Archive is stale (>90m);");
+      },
       null,
       { timeout: 20000 }
     );
@@ -95,7 +99,14 @@ async function main() {
     );
 
     assert.match(summary || "", /(Latest archived cycle:|archived cycles · latest:)/);
-    assert.equal(status, "Latest archive record loaded");
+    assert.ok(
+      status === "Latest archive record loaded" ||
+        status.startsWith("Latest archive record loaded. Archive is stale (>90m);"),
+      "the latest archive must be visibly loaded, with a stale warning when older than 90 minutes"
+    );
+    if (status !== "Latest archive record loaded") {
+      assert.match(summary || "", /STALE$/);
+    }
     assert.ok(renderedRows > 0, "the public archive should render at least one experiment row");
     assert.ok(
       externalRequests.length <= 2,
