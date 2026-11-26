@@ -1,8 +1,5 @@
 (function (root) {
   "use strict";
-
-  // Staging-only: use PR #2's compact snapshot until that PR is merged to main.
-  // Staging-only: use PR #2's compact snapshot until that PR is merged to main.
   const LATEST_URL =
     "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json";
   const ARCHIVE_URL =
@@ -28,10 +25,8 @@
     );
   }
 
-  function isStaleArchive(data, nowMs = Date.now()) {
-    const latest = Array.isArray(data) ? data[0] : null;
-    return Boolean(latest && nowMs - Date.parse(latest.time) > STALE_AFTER_MS);
-  }
+  const isStaleArchive = (data, nowMs = Date.now()) =>
+    Boolean(data && data[0] && nowMs - Date.parse(data[0].time) > STALE_AFTER_MS);
 
   function createController(options) {
     const doc = options.document;
@@ -76,7 +71,7 @@
         ? data.length + " archived cycles · latest: " + timestamp
         : "Latest archived cycle: " + timestamp) + (stale ? " · STALE" : "");
       setStatus((statusMessage || "Latest archive record loaded") +
-        (stale ? ". Latest cycle is over 90 minutes old; scheduled runs may be delayed." : ""));
+        (stale ? ". Archive is stale (>90m); scheduled runs may be delayed." : ""));
       body.replaceChildren();
 
       const experiments = latest.experiments.slice(0, MAX_EXPERIMENTS);
@@ -176,7 +171,6 @@
         try {
           latestResponse = await fetchImpl(LATEST_URL, init);
         } catch (_) {
-          // A transient network error should not prevent the full archive fallback.
           if (signal && signal.aborted) throw new Error("archive_unavailable");
         }
         if (latestResponse && latestResponse.ok) {
@@ -191,7 +185,6 @@
         } else if (latestResponse && latestResponse.status === 404) {
           rememberMissingSnapshot();
         }
-        // Transient network/5xx failures fall through without negative-caching.
       }
 
       const archiveResponse = await fetchImpl(ARCHIVE_URL, init);
