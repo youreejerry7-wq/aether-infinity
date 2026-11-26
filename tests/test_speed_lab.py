@@ -673,21 +673,6 @@ class CrossMethodEfficiencyBootstrapTests(unittest.TestCase):
                 _bootstrap_error_time_efficiency(*args)
 
 
-class AntitheticVarianceQuadratureTests(unittest.TestCase):
-    def test_variance_quadrature_is_stable_when_grid_is_doubled(self):
-        coarse = antithetic_unit_variance_midpoint(16_384)
-        fine = antithetic_unit_variance_midpoint(32_768)
-        self.assertGreater(coarse, 0.0)
-        self.assertGreater(fine, 0.0)
-        # The fixed 16,384-point reference changes by less than 5e-7
-        # when the midpoint grid is doubled; this is below the reported
-        # bootstrap uncertainty scale, but the value remains an approximation.
-        self.assertLess(abs(coarse - fine), 5e-7)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
     def test_fixed_sample_methods_share_replication_rng_stream_for_paired_bootstrap(self):
         """The paired cross-method bootstrap must match the shared RNG design."""
         from unittest.mock import patch
@@ -717,3 +702,20 @@ if __name__ == "__main__":
                 "paired_between_method_percentile_bootstrap",
             )
 
+
+class AntitheticVarianceQuadratureTests(unittest.TestCase):
+    def test_variance_quadrature_is_stable_when_grid_is_doubled(self):
+        coarse = antithetic_unit_variance_midpoint(16_384)
+        fine = antithetic_unit_variance_midpoint(32_768)
+        self.assertGreater(coarse, 0.0)
+        self.assertGreater(fine, 0.0)
+        # The fixed 16,384-point reference changes by less than 5e-7
+        # when the midpoint grid is doubled; this is below the reported
+        # bootstrap uncertainty scale, but the value remains an approximation.
+        self.assertLess(abs(coarse - fine), 5e-7)
+
+
+
+
+if __name__ == "__main__":
+    unittest.main()
