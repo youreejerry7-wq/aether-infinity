@@ -162,6 +162,28 @@ const settle = () => new Promise(resolve => setImmediate(resolve));
   assert.equal(archiveRequests().length, 2, 'Resume when tab is visible after interval');
   assert.equal(activeScheduledTimers().length, 1, 'Visible recovery schedules exactly one next refresh');
 
+  // Concurrent refresh triggers must share the in-flight request, not fan out.
+  clockMs += 300000;
+  hangGitHub = true;
+  const requestsBeforeOverlap = archiveRequests().length;
+  const firstInFlight = context.loadAuto();
+  await settle();
+  assert.equal(archiveRequests().length, requestsBeforeOverlap + 1,
+    'The first due refresh should start one compact-snapshot request');
+  const secondInFlight = context.loadAuto();
+  await secondInFlight;
+  assert.equal(archiveRequests().length, requestsBeforeOverlap + 1,
+    'A concurrent refresh must not start a duplicate network request');
+  const overlapTimeout = timeoutTasks.at(-1);
+  assert.equal(overlapTimeout.ms, 15000, 'The shared in-flight request remains bounded');
+  overlapTimeout.fn();
+  await firstInFlight;
+  assert.equal(archiveRequests().length, requestsBeforeOverlap + 2,
+    'After the timed-out snapshot, only the single full-archive fallback should be requested');
+  assert.equal(requests.at(-1).url, archiveUrl);
+  assert.equal(activeScheduledTimers().length, 1,
+    'The recovered refresh schedules only one next polling timer');
+
   // If the compact file has not reached main yet, use the full GitHub archive.
   snapshotMissing = true;
   clockMs += 300000;
