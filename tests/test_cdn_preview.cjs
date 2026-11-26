@@ -14,7 +14,7 @@ const {
   SNAPSHOT_MISSING_KEY,
   SNAPSHOT_MISSING_RECHECK_MS,
   STALE_AFTER_MS,
-  getStaleAgeMinutes,
+  isStaleArchive,
   RETRY_MS,
   createController,
   isUsableArchive
@@ -134,10 +134,9 @@ test("archive validation rejects empty, malformed, and undated data", () => {
 test("archive freshness warning starts only after 90 minutes", () => {
   const data = archive();
   const timestamp = Date.parse(data[0].time);
-  assert.equal(getStaleAgeMinutes(data, timestamp + STALE_AFTER_MS), null);
-  assert.equal(getStaleAgeMinutes(data, timestamp + STALE_AFTER_MS + 60_000), 91);
-  assert.equal(getStaleAgeMinutes(data, timestamp + 2 * 60 * 60 * 1000), 120);
-  assert.equal(getStaleAgeMinutes([], timestamp + 2 * 60 * 60 * 1000), null);
+  assert.equal(isStaleArchive(data, timestamp + STALE_AFTER_MS), false);
+  assert.equal(isStaleArchive(data, timestamp + STALE_AFTER_MS + 1), true);
+  assert.equal(isStaleArchive([], timestamp + 2 * 60 * 60 * 1000), false);
 });
 
 test("a stale compact snapshot is explicitly labeled in status and summary", async () => {
@@ -150,10 +149,7 @@ test("a stale compact snapshot is explicitly labeled in status and summary", asy
 
   assert.equal(await h.controller.refresh(false), true);
   assert.match(h.document.nodes.summary.textContent, /STALE$/);
-  assert.match(
-    h.document.nodes.status.textContent,
-    /Latest cycle is 120 minutes old; scheduled runs may be delayed/
-  );
+  assert.match(h.document.nodes.status.textContent, /over 90 minutes old; scheduled runs may be delayed/);
 });
 
 test("staging preview prefers PR #2's review snapshot until it is merged", async () => {

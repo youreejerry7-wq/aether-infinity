@@ -28,14 +28,9 @@
     );
   }
 
-  function getStaleAgeMinutes(data, nowMs = Date.now()) {
+  function isStaleArchive(data, nowMs = Date.now()) {
     const latest = Array.isArray(data) ? data[0] : null;
-    const timestamp = latest && typeof latest.time === "string"
-      ? Date.parse(latest.time)
-      : NaN;
-    const ageMs = nowMs - timestamp;
-    if (!Number.isFinite(timestamp) || ageMs <= STALE_AFTER_MS) return null;
-    return Math.floor(ageMs / (60 * 1000));
+    return Boolean(latest && nowMs - Date.parse(latest.time) > STALE_AFTER_MS);
   }
 
   function createController(options) {
@@ -72,21 +67,16 @@
     function render(data, statusMessage) {
       const latest = data[0];
       const timestamp = new Date(latest.time).toLocaleString();
-      const staleAgeMinutes = getStaleAgeMinutes(data, now());
-      const staleWarning = staleAgeMinutes === null
-        ? ""
-        : `Latest cycle is ${staleAgeMinutes} minutes old; scheduled runs may be delayed.`;
+      const stale = isStaleArchive(data, now());
       const summary = doc.getElementById("summary");
       const body = doc.getElementById("experiments");
       const note = doc.getElementById("note");
 
-      const summaryText = data.length > 1
+      summary.textContent = (data.length > 1
         ? data.length + " archived cycles · latest: " + timestamp
-        : "Latest archived cycle: " + timestamp;
-      summary.textContent = summaryText + (staleAgeMinutes === null ? "" : " · STALE");
-      setStatus([statusMessage || "Latest archive record loaded", staleWarning]
-        .filter(Boolean)
-        .join(". "));
+        : "Latest archived cycle: " + timestamp) + (stale ? " · STALE" : "");
+      setStatus((statusMessage || "Latest archive record loaded") +
+        (stale ? ". Latest cycle is over 90 minutes old; scheduled runs may be delayed." : ""));
       body.replaceChildren();
 
       const experiments = latest.experiments.slice(0, MAX_EXPERIMENTS);
@@ -295,7 +285,7 @@
     SNAPSHOT_MISSING_RECHECK_MS,
     STALE_AFTER_MS,
     isUsableArchive,
-    getStaleAgeMinutes,
+    isStaleArchive,
     createController
   };
 
