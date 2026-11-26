@@ -687,3 +687,33 @@ class AntitheticVarianceQuadratureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_fixed_sample_methods_share_replication_rng_stream_for_paired_bootstrap(self):
+        """The paired cross-method bootstrap must match the shared RNG design."""
+        from unittest.mock import patch
+        import speed_lab
+
+        first_draws = {name: [] for name in METHODS}
+
+        def make_method(name):
+            def stub(samples, rng):
+                first_draws[name].append(rng.random())
+                return math.pi + 0.001 * rng.random()
+            return stub
+
+        stub_methods = {name: make_method(name) for name in METHODS}
+        with patch.object(speed_lab, "METHODS", stub_methods):
+            report = benchmark(samples=10, replicates=4, seed=20261126)
+
+        # Each fixed-sample replication intentionally reuses the same seeded
+        # stream across methods. The paired bootstrap relies on this alignment.
+        for replication in range(4):
+            draws = [first_draws[name][replication] for name in METHODS]
+            self.assertTrue(all(value == draws[0] for value in draws[1:]))
+
+        for name in METHODS:
+            self.assertEqual(
+                report["results"][name]["observed_error_time_efficiency_bootstrap"]["method"],
+                "paired_between_method_percentile_bootstrap",
+            )
+
