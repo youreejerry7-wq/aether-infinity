@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json?verify=${GITHUB_SHA}"
+          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/17251c5ddebc397554fa2de9893bc12f15d78f2a/data/research-latest.json"
           latest_metrics=$(curl -sS -L -H "Cache-Control: no-cache" --connect-timeout 5 --max-time 15 \
             --dump-header "$RUNNER_TEMP/latest.headers" \
             --output "$RUNNER_TEMP/research-latest.json" \
