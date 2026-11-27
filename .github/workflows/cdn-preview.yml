@@ -99,7 +99,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/17251c5ddebc397554fa2de9893bc12f15d78f2a/data/research-latest.json"
+          # Validate the exact URL the browser uses. A separate pinned URL could
+          # pass while the runtime branch URL serves stale or different data.
+          latest_url=$(node -e 'process.stdout.write(require("./cdn-preview/app.js").LATEST_URL)')
+          case "$latest_url" in
+            https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/*/data/research-latest.json) ;;
+            *)
+              echo "::error::Unexpected compact snapshot URL in CDN runtime: $latest_url"
+              exit 1
+              ;;
+          esac
+          echo "Validating runtime compact snapshot URL: $latest_url"
           latest_metrics=$(curl -sS -L -H "Cache-Control: no-cache" --connect-timeout 5 --max-time 15 \
             --dump-header "$RUNNER_TEMP/latest.headers" \
             --output "$RUNNER_TEMP/research-latest.json" \
