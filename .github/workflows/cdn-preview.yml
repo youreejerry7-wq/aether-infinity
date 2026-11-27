@@ -99,8 +99,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json"
-          latest_metrics=$(curl -sS -L --connect-timeout 5 --max-time 15 \
+          latest_url="https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json?verify=${GITHUB_SHA}"
+          latest_metrics=$(curl -sS -L -H "Cache-Control: no-cache" --connect-timeout 5 --max-time 15 \
             --dump-header "$RUNNER_TEMP/latest.headers" \
             --output "$RUNNER_TEMP/research-latest.json" \
             --write-out '%{http_code} %{time_starttransfer} %{time_total} %{size_download}' "$latest_url" || true)
