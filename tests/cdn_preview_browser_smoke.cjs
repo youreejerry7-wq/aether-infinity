@@ -93,6 +93,10 @@ async function main() {
     const compactSnapshotLoaded = compactSnapshotResponses.some(
       (response) => response.status === 200
     );
+    const fullArchiveLoaded = rawArchiveResponses.some(
+      (response) =>
+        response.url.endsWith("/data/research.json") && response.status === 200
+    );
     const decodedResponseBodyBytes = responseRecords.reduce(
       (total, response) => total + response.bodyBytes,
       0
@@ -124,31 +128,38 @@ async function main() {
     assert.ok(pageMetrics.domContentLoadedMs > 0 && pageMetrics.domContentLoadedMs <= 3000,
       "DOMContentLoaded should stay within the 3-second preview budget");
     assert.ok(decodedResponseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
-    if (compactSnapshotLoaded) {
+    if (compactSnapshotLoaded && !fullArchiveLoaded) {
       const compactSnapshotResponse = compactSnapshotResponses.find(
         (response) => response.status === 200
       );
       assert.ok(
         compactSnapshotResponse.bodyBytes > 0 && compactSnapshotResponse.bodyBytes <= 2048,
-        "the browser must load a nonempty compact snapshot no larger than 2 KiB"
+        "a fresh compact snapshot must be nonempty and no larger than 2 KiB"
       );
       assert.equal(externalRequests.length, 1,
-        "a valid compact snapshot should require exactly one external archive request");
+        "a fresh compact snapshot should require exactly one external archive request");
       assert.ok(decodedResponseBodyBytes <= 25000,
         "compact-snapshot initial HTML, JS, and data payload should stay below 25 KB");
     } else {
       assert.ok(
-        compactSnapshotResponses.some((response) => response.status === 404),
-        "an unpublished main snapshot must return 404 before the canonical fallback"
-      );
-      assert.ok(
-        rawArchiveResponses.some((response) =>
-          response.url.endsWith("/data/research.json") && response.status === 200
-        ),
-        "the canonical main archive must load when the compact snapshot is not yet published"
+        fullArchiveLoaded,
+        "a stale, missing, or invalid compact snapshot must fall back to the canonical archive"
       );
       assert.equal(externalRequests.length, 2,
-        "the unpublished snapshot should cause exactly one bounded fallback request");
+        "snapshot fallback should make exactly one compact attempt and one canonical request");
+      if (compactSnapshotLoaded) {
+        assert.match(
+          summary || "",
+          /archived cycles · latest:/,
+          "a stale but valid snapshot should be replaced by the full archive"
+        );
+      } else {
+        assert.ok(
+          compactSnapshotResponses.some((response) => response.status === 404) ||
+            compactSnapshotResponses.some((response) => response.status >= 500),
+          "an unavailable compact snapshot should be visibly followed by the canonical fallback"
+        );
+      }
     }
     assert.ok(dataReadyMs <= 8000, "archive data should become visible within the 8-second preview budget");
 
@@ -157,6 +168,10 @@ async function main() {
       previewUrl,
       htmlStatus: navigation.status(),
       compactSnapshotLoaded,
+      fullArchiveLoaded,
+      snapshotFallbackReason: fullArchiveLoaded
+        ? (compactSnapshotLoaded ? "stale_or_invalid_snapshot" : "snapshot_unavailable")
+        : null,
       dataReadyMs,
       ...pageMetrics,
       externalRequestCount: externalRequests.length,
