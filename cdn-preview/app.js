@@ -177,8 +177,11 @@
           try {
             const latestData = await latestResponse.json();
             if (isUsableArchive(latestData)) {
-              clearMissingSnapshot();
-              return latestData;
+              if (!isStaleArchive(latestData, now())) {
+                clearMissingSnapshot();
+                return latestData;
+              }
+              // A valid but stale snapshot must not hide a fresher full archive.
             }
           } catch (_) {}
           rememberMissingSnapshot();
