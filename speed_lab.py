@@ -482,6 +482,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
     are recorded, never forced to equal the requested budget. Calibration
     overhead is excluded from trial durations and reported separately.
     """
+    benchmark_start = time.perf_counter()
     if (isinstance(budget_seconds, bool) or
             not isinstance(budget_seconds, (int, float)) or
             not math.isfinite(budget_seconds) or
@@ -675,8 +676,8 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
             "therefore reports median_time_as_fraction_of_target alongside the global "
             "sampling_budget_scale_factor. Actual elapsed times are measured, not assumed. "
             "Full end-to-end "
-            "wall time includes reference quadrature, calibration, measured trials, "
-            "and report assembly. Shared setup is reported separately and is not "
+            "wall time includes input validation, reference quadrature, calibration, "
+            "measured trials, and report assembly. Shared setup is reported separately and is not "
             "allocated to individual methods; per-method error-time ratios exclude "
             "that shared setup and must be interpreted alongside end-to-end time. "
             "Full calibration wall time (including order generation, RNG setup, and estimator calls) "
@@ -715,7 +716,7 @@ def benchmark_matched_time(budget_seconds=0.02, replicates=8, seed=2026):
         "sampling_unit_budget": MAX_TOTAL_SAMPLES,
         "results": results,
     }
-    report["end_to_end_wall_seconds"] = time.perf_counter() - variance_setup_start
+    report["end_to_end_wall_seconds"] = time.perf_counter() - benchmark_start
     return report
 
 

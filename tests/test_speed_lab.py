@@ -531,11 +531,11 @@ class SpeedLabTests(unittest.TestCase):
                 budget_seconds=0.005, replicates=2, seed=1
             )
 
-        # First two clock events measure shared quadrature setup. The third
-        # begins the full calibration window before RNG construction.
-        self.assertEqual(events[:3], ["clock", "clock", "clock"])
+        # The first clock starts end-to-end timing before input validation;
+        # the next two bracket quadrature and the fourth starts calibration.
+        self.assertEqual(events[:4], ["clock", "clock", "clock", "clock"])
         # Each calibration estimator timer still excludes its RNG construction.
-        self.assertEqual(events[4:16], ["rng", "clock", "method", "clock"] * 3)
+        self.assertEqual(events[5:17], ["rng", "clock", "method", "clock"] * 3)
         self.assertGreater(report["calibration_wall_seconds"],
                            report["calibration_estimator_seconds"])
 
