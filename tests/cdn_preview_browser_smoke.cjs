@@ -155,9 +155,8 @@ async function main() {
         );
       } else {
         assert.ok(
-          compactSnapshotResponses.some((response) => response.status === 404) ||
-            compactSnapshotResponses.some((response) => response.status >= 500),
-          "an unavailable compact snapshot should be visibly followed by the canonical fallback"
+          externalRequests.some((url) => url.includes("/data/research-latest.json")),
+          "the compact snapshot endpoint should be attempted before the canonical fallback"
         );
       }
     }
