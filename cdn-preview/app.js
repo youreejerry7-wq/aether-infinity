@@ -176,12 +176,9 @@
         if (latestResponse && latestResponse.ok) {
           try {
             const latestData = await latestResponse.json();
-            if (isUsableArchive(latestData)) {
-              if (!isStaleArchive(latestData, now())) {
-                clearMissingSnapshot();
-                return latestData;
-              }
-              // A valid but stale snapshot must not hide a fresher full archive.
+            if (isUsableArchive(latestData) && !isStaleArchive(latestData, now())) {
+              clearMissingSnapshot();
+              return latestData;
             }
           } catch (_) {}
           rememberMissingSnapshot();
