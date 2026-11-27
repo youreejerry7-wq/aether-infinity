@@ -139,17 +139,62 @@ test("archive freshness warning starts only after 90 minutes", () => {
   assert.equal(isStaleArchive([], timestamp + 2 * 60 * 60 * 1000), false);
 });
 
-test("a stale compact snapshot is explicitly labeled in status and summary", async () => {
-  const payload = archive("stale compact snapshot").slice(0, 1);
-  const now = Date.parse(payload[0].time) + 2 * 60 * 60 * 1000;
+test("a stale compact snapshot falls back to a fresher full archive and is throttled", async () => {
+  const staleSnapshot = archive("stale compact snapshot").slice(0, 1);
+  const now = Date.parse(staleSnapshot[0].time) + 2 * 60 * 60 * 1000;
+  const freshArchive = archive("fresh full archive");
+  freshArchive[0].time = new Date(now).toISOString();
+  const storage = makeMemoryStorage();
+  let snapshotCalls = 0;
   const h = makeHarness(async (url) => {
-    assert.equal(url, LATEST_URL);
-    return { ok: true, status: 200, json: async () => payload };
+    if (url === LATEST_URL) {
+      snapshotCalls += 1;
+      return { ok: true, status: 200, json: async () => staleSnapshot };
+    }
+    assert.equal(url, ARCHIVE_URL);
+    return { ok: true, status: 200, json: async () => freshArchive };
+  }, now, storage, true);
+
+  assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
+  assert.equal(
+    h.document.nodes.experiments.children[0].children[0].textContent,
+    "fresh full archive"
+  );
+  assert.doesNotMatch(h.document.nodes.summary.textContent, /STALE$/);
+  assert.equal(
+    storage.getItem(SNAPSHOT_MISSING_KEY),
+    String(now + SNAPSHOT_MISSING_RECHECK_MS)
+  );
+
+  // Skip the known-stale snapshot until its bounded recheck window expires.
+  h.advance(REFRESH_MS);
+  assert.equal(await h.controller.refresh(false), true);
+  assert.equal(snapshotCalls, 1);
+  assert.deepEqual(
+    h.calls.map((call) => call.url),
+    [LATEST_URL, ARCHIVE_URL, ARCHIVE_URL]
+  );
+});
+
+test("a stale full-archive fallback remains visibly labeled", async () => {
+  const staleSnapshot = archive("stale compact snapshot").slice(0, 1);
+  const staleFullArchive = archive("stale full archive");
+  const now = Date.parse(staleSnapshot[0].time) + 2 * 60 * 60 * 1000;
+  const h = makeHarness(async (url) => {
+    if (url === LATEST_URL) {
+      return { ok: true, status: 200, json: async () => staleSnapshot };
+    }
+    assert.equal(url, ARCHIVE_URL);
+    return { ok: true, status: 200, json: async () => staleFullArchive };
   }, now, null, true);
 
   assert.equal(await h.controller.refresh(false), true);
   assert.match(h.document.nodes.summary.textContent, /STALE$/);
-  assert.match(h.document.nodes.status.textContent, /Archive is stale \(>90m\); scheduled runs may be delayed/);
+  assert.match(
+    h.document.nodes.status.textContent,
+    /Archive is stale \(>90m\); scheduled runs may be delayed/
+  );
 });
 
 test("staging preview prefers PR #2's review snapshot until it is merged", async () => {
