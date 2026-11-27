@@ -1,7 +1,7 @@
 (function (root) {
   "use strict";
   const LATEST_URL =
-    "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json";
+    "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json";
   const ARCHIVE_URL =
     "https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research.json";
   const REFRESH_MS = 5 * 60 * 1000;
@@ -176,7 +176,7 @@
         if (latestResponse && latestResponse.ok) {
           try {
             const latestData = await latestResponse.json();
-            if (isUsableArchive(latestData) && !isStaleArchive(latestData, now())) {
+            if (isUsableArchive(latestData)) {
               clearMissingSnapshot();
               return latestData;
             }

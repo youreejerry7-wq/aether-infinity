@@ -128,7 +128,9 @@ async function main() {
     assert.ok(pageMetrics.domContentLoadedMs > 0 && pageMetrics.domContentLoadedMs <= 3000,
       "DOMContentLoaded should stay within the 3-second preview budget");
     assert.ok(decodedResponseBodyBytes <= 150000, "initial HTML, JS, and archive payload should stay below 150 KB");
-    if (compactSnapshotLoaded && !fullArchiveLoaded) {
+    if (compactSnapshotLoaded) {
+      assert.equal(fullArchiveLoaded, false,
+        "a valid compact snapshot must be used even when stale; the UI carries the stale warning");
       const compactSnapshotResponse = compactSnapshotResponses.find(
         (response) => response.status === 200
       );
@@ -147,18 +149,10 @@ async function main() {
       );
       assert.equal(externalRequests.length, 2,
         "snapshot fallback should make exactly one compact attempt and one canonical request");
-      if (compactSnapshotLoaded) {
-        assert.match(
-          summary || "",
-          /archived cycles · latest:/,
-          "a stale but valid snapshot should be replaced by the full archive"
-        );
-      } else {
-        assert.ok(
-          externalRequests.some((url) => url.includes("/data/research-latest.json")),
-          "the compact snapshot endpoint should be attempted before the canonical fallback"
-        );
-      }
+      assert.ok(
+        externalRequests.some((url) => url.includes("/data/research-latest.json")),
+        "the compact snapshot endpoint should be attempted before the canonical fallback"
+      );
     }
     assert.ok(dataReadyMs <= 8000, "archive data should become visible within the 8-second preview budget");
 

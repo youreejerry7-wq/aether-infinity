@@ -4,7 +4,7 @@ This directory is an isolated, static-only frontend experiment intended to measu
 
 ## Safety and scope
 
-- Prefers the one-record `data/research-latest.json` snapshot from GitHub Raw and falls back to the full `data/research.json` archive only while the snapshot is unavailable.
+- Prefers the one-record `main/data/research-latest.json` snapshot from GitHub Raw and falls back to the full `data/research.json` archive only when the snapshot is missing or invalid.
 - Does not call `/api/run`, `/api/results`, `/health`, SQLite, Stripe, or any private/customer endpoint.
 - Does not submit experiments, mutate the archive, or access secrets.
 - Uses text-only DOM rendering for archive-supplied strings.
@@ -27,7 +27,7 @@ After this pull request is reviewed, a separate free Render Static Site can be e
 
 Do not create, replace, or redirect the production web service as part of this PR. First deploy a separate preview site, verify its own URL and browser behavior, and compare its first-load and repeat-load latency against the existing Flask homepage. Only consider a production-domain change after explicit owner review.
 
-The static page itself is served from Render's static-site CDN. During staging, it targets PR #2's review-branch snapshot at `jules-12948179582805029839-43dc1e9e/data/research-latest.json`, which is refreshed alongside the canonical archive. The preview falls back to the full archive if the snapshot is missing or invalid. CI verifies the snapshot matches the newest archive record and enforces the compact-payload budget. After PR #2 is merged, switch the snapshot URL to `main/data/research-latest.json` and rerun the browser checks. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
+The static page itself is served from Render's static-site CDN. It now reads the compact snapshot from the canonical `main/data/research-latest.json` path rather than a review branch that can stop receiving updates. Until PR #2 publishes that file on `main`, the expected 404 triggers the existing full-archive fallback. After PR #2 merges, the scheduled workflow publishes the compact snapshot alongside the full archive in the same commit. A structurally valid snapshot is displayed even when older than 90 minutes, with an explicit stale warning; the preview no longer downloads the full archive merely to rediscover the same stale head. CI verifies that a published snapshot exactly matches the full archive head and meets the compact-payload budget. No URL switch is needed after PR #2 merges. The link to the interactive Flask lab is optional and may incur the free web service's wake-up delay.
 
 ## Local checks
 
@@ -56,6 +56,6 @@ These are point observations, not a controlled cold-start or global CDN benchmar
 
 ## Current archive fetch mode (isolated staging only)
 
-The staging preview currently targets PR #2's review-branch snapshot (`jules-12948179582805029839-43dc1e9e`) so the compact payload can be tested before merge. The full-archive fallback remains covered by regression tests. After PR #2 merges, switch the URL to `main/data/research-latest.json` and remove the review-branch dependency. CI requires the compact snapshot to exactly match the newest full-archive record and be at least 80% smaller.
+The staging preview always requests the canonical `main/data/research-latest.json` snapshot. Until PR #2 is merged, the expected 404 uses the tested full-archive fallback. Once PR #2 is merged, the compact snapshot becomes available without another frontend edit. A valid snapshot is used even when stale: the UI labels it stale, and the next five-minute refresh checks for a newer main-branch snapshot. The scheduled workflow publishes the snapshot and full archive together; CI verifies they match and requires the compact file to be at least 80% smaller.
 
 The preview remains a separate read-only staging site. No production domain, Flask route, database, payment flow, or Render production service is changed.

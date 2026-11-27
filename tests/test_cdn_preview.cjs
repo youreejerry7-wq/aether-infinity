@@ -139,75 +139,52 @@ test("archive freshness warning starts only after 90 minutes", () => {
   assert.equal(isStaleArchive([], timestamp + 2 * 60 * 60 * 1000), false);
 });
 
-test("a stale compact snapshot falls back to a fresher full archive and is throttled", async () => {
+test("a valid stale compact snapshot is displayed with a warning without downloading the full archive", async () => {
   const staleSnapshot = archive("stale compact snapshot").slice(0, 1);
   const now = Date.parse(staleSnapshot[0].time) + 2 * 60 * 60 * 1000;
-  const freshArchive = archive("fresh full archive");
-  freshArchive[0].time = new Date(now).toISOString();
   const storage = makeMemoryStorage();
-  let snapshotCalls = 0;
   const h = makeHarness(async (url) => {
-    if (url === LATEST_URL) {
-      snapshotCalls += 1;
-      return { ok: true, status: 200, json: async () => staleSnapshot };
-    }
-    assert.equal(url, ARCHIVE_URL);
-    return { ok: true, status: 200, json: async () => freshArchive };
+    assert.equal(url, LATEST_URL);
+    return { ok: true, status: 200, json: async () => staleSnapshot };
   }, now, storage, true);
 
   assert.equal(await h.controller.refresh(false), true);
-  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
   assert.equal(
     h.document.nodes.experiments.children[0].children[0].textContent,
-    "fresh full archive"
+    "stale compact snapshot"
   );
-  assert.doesNotMatch(h.document.nodes.summary.textContent, /STALE$/);
-  assert.equal(
-    storage.getItem(SNAPSHOT_MISSING_KEY),
-    String(now + SNAPSHOT_MISSING_RECHECK_MS)
-  );
+  assert.match(h.document.nodes.summary.textContent, /STALE$/);
+  assert.match(h.document.nodes.status.textContent, /Archive is stale/);
+  assert.equal(storage.getItem(SNAPSHOT_MISSING_KEY), null);
 
-  // Skip the known-stale snapshot until its bounded recheck window expires.
+  // Keep checking the canonical snapshot on the normal five-minute cadence.
   h.advance(REFRESH_MS);
   assert.equal(await h.controller.refresh(false), true);
-  assert.equal(snapshotCalls, 1);
-  assert.deepEqual(
-    h.calls.map((call) => call.url),
-    [LATEST_URL, ARCHIVE_URL, ARCHIVE_URL]
-  );
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, LATEST_URL]);
 });
-
-test("a stale full-archive fallback remains visibly labeled", async () => {
-  const staleSnapshot = archive("stale compact snapshot").slice(0, 1);
+test("a stale full-archive fallback remains visibly labeled when the compact snapshot is missing", async () => {
   const staleFullArchive = archive("stale full archive");
-  const now = Date.parse(staleSnapshot[0].time) + 2 * 60 * 60 * 1000;
+  const now = Date.parse(staleFullArchive[0].time) + 2 * 60 * 60 * 1000;
   const h = makeHarness(async (url) => {
-    if (url === LATEST_URL) {
-      return { ok: true, status: 200, json: async () => staleSnapshot };
-    }
+    if (url === LATEST_URL) return { ok: false, status: 404 };
     assert.equal(url, ARCHIVE_URL);
     return { ok: true, status: 200, json: async () => staleFullArchive };
   }, now, null, true);
 
   assert.equal(await h.controller.refresh(false), true);
+  assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL, ARCHIVE_URL]);
   assert.match(h.document.nodes.summary.textContent, /STALE$/);
-  assert.match(
-    h.document.nodes.status.textContent,
-    /Archive is stale \(>90m\); scheduled runs may be delayed/
-  );
+  assert.match(h.document.nodes.status.textContent, /Archive is stale/);
 });
-
-test("staging preview prefers PR #2's review snapshot until it is merged", async () => {
+test("staging preview reads the canonical main-branch snapshot URL", async () => {
   const payload = archive("current compact snapshot").slice(0, 1);
   const h = makeHarness(async (url) => {
-    assert.equal(url, LATEST_URL, "staging should fetch PR #2's current review snapshot first");
+    assert.equal(url, LATEST_URL, "staging should fetch the canonical main snapshot first");
     return { ok: true, status: 200, json: async () => payload };
   }, 1000, null, true);
 
-  assert.match(
-    LATEST_URL,
-    /\/jules-12948179582805029839-43dc1e9e\/data\/research-latest\.json$/
-  );
+  assert.match(LATEST_URL, /\/main\/data\/research-latest\.json$/);
   assert.equal(await h.controller.refresh(false), true);
   assert.deepEqual(h.calls.map((call) => call.url), [LATEST_URL]);
   assert.equal(
@@ -215,13 +192,12 @@ test("staging preview prefers PR #2's review snapshot until it is merged", async
     "current compact snapshot"
   );
 
-  // Switch this staging URL to main/data/research-latest.json after PR #2 merges.
-  // The separate fallback regression still verifies that the full archive remains usable.
+  // The compact snapshot is maintained on main alongside the full archive.
+  // Before PR #2 merges, the missing-snapshot regression verifies safe fallback.
   const source = fs.readFileSync(path.join(__dirname, "../cdn-preview/app.js"), "utf8");
   const browserBootstrap = source.slice(source.lastIndexOf("if (root.document"));
   assert.match(browserBootstrap, /compactSnapshotEnabled\s*:\s*true/);
 });
-
 test("preview prefers the compact latest snapshot and renders untrusted text inertly", async () => {
   const payload = archive("<img src=x onerror=alert(1)>").slice(0, 1);
   const h = makeHarness(async () => ({ ok: true, status: 200, json: async () => payload }), 1000, null, true);

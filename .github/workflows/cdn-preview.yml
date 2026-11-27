@@ -103,7 +103,7 @@ jobs:
           # pass while the runtime branch URL serves stale or different data.
           latest_url=$(node -e 'process.stdout.write(require("./cdn-preview/app.js").LATEST_URL)')
           case "$latest_url" in
-            https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/*/data/research-latest.json) ;;
+            https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json) ;;
             *)
               echo "::error::Unexpected compact snapshot URL in CDN runtime: $latest_url"
               exit 1
@@ -139,13 +139,13 @@ jobs:
           print(f"Compact snapshot: {latest_bytes} bytes vs {archive_bytes} full-archive bytes ({reduction:.1f}% smaller; 80% minimum)")
           PY
           elif [ "$latest_code" = "404" ]; then
-            echo "::error::PR #2 review snapshot is missing; update the staging URL before continuing."
+            echo "::notice::The main compact snapshot is not published yet; the tested full-archive fallback remains active until PR #2 is merged."
           else
             echo "::error::Unexpected compact snapshot response: HTTP ${latest_code:-000}"
             exit 1
           fi
 
-          if ! grep -Fq 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/jules-12948179582805029839-43dc1e9e/data/research-latest.json' cdn-preview/app.js; then
+          if ! grep -Fq 'https://raw.githubusercontent.com/youreejerry7-wq/aether-infinity/main/data/research-latest.json' cdn-preview/app.js; then
             echo "::error::The preview must use the pinned PR #2 review snapshot URL."
             exit 1
           fi
@@ -220,7 +220,7 @@ jobs:
           grep -q 'aether.archive.preview.snapshot-missing-until.v1' "$RUNNER_TEMP/cdn-preview.js"
           # Catch a stale staging deploy that has not picked up the stale-snapshot fallback.
           grep -Fq 'const latestData = await latestResponse.json();' "$RUNNER_TEMP/cdn-preview.js"
-          grep -Fq 'if (isUsableArchive(latestData) && !isStaleArchive(latestData, now()))' "$RUNNER_TEMP/cdn-preview.js"
+          grep -Fq 'if (isUsableArchive(latestData))' "$RUNNER_TEMP/cdn-preview.js"
           grep -Fq '15 * 60 * 1000' "$RUNNER_TEMP/cdn-preview.js"
           source_bytes=$(wc -c < "$RUNNER_TEMP/cdn-preview.js")
           gzip_bytes=$(gzip -c "$RUNNER_TEMP/cdn-preview.js" | wc -c)
